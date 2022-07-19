@@ -6,14 +6,16 @@
 package k8s
 
 import (
+	"context"
+	"log"
+
 	. "github.com/serhii-samoilenko/pod-startup-lock/common/util"
 	. "github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"log"
 )
 
 type Client struct {
@@ -28,14 +30,14 @@ func NewClient(appConfig Config) *Client {
 
 func (c *Client) GetNodeLabels(nodeName string) map[string]string {
 	node := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.CoreV1().Nodes().Get(nodeName, meta.GetOptions{})
+		return c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
 	})).(*v1.Node)
 	return node.Labels
 }
 
 func (c *Client) GetDaemonSets(namespace string) []v1beta1.DaemonSet {
 	daemonSetList := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.ExtensionsV1beta1().DaemonSets(namespace).List(meta.ListOptions{})
+		return c.k8s.ExtensionsV1beta1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
 	})).(*v1beta1.DaemonSetList)
 	return daemonSetList.Items
 }
@@ -45,7 +47,7 @@ func (c *Client) GetNodePods(nodeName string) []v1.Pod {
 	opt.FieldSelector = "spec.nodeName=" + nodeName
 
 	podList := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.CoreV1().Pods("").List(opt)
+		return c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
 	})).(*v1.PodList)
 	return podList.Items
 }
