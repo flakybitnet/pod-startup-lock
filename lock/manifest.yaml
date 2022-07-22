@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "startup-contoller"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: startup-lock
+  namespace: startup-contoller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: startup-lock
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get","list"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs: ["get", "list"] 
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: startup-lock
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: startup-lock
+subjects:
+  - kind: ServiceAccount
+    name: startup-lock
+    namespace: startup-contoller
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: startup-lock
+  namespace: startup-contoller
+spec:
+  selector:
+    matchLabels:
+      app: startup-lock
+  template:
+    metadata:
+      labels:
+        app: startup-lock
+        version: '1.0'
+    spec:
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: startup-lock
+      containers:        
+        - name: startup-lock-container
+          image: pod-startup-lock:lock-1.0.2
+          imagePullPolicy: Always
+          args: ["--port", "8888", "--locks", "1", "--check", "http://$(HOST_IP):9999"]
+          ports:
+            - name: http
+              containerPort: 8888
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+        - name: startup-lock-k8s-health-container
+          image: pod-startup-lock:k8s-health-1.0.2
+          imagePullPolicy: Always
+          args: ["--port", "9999", "--hostNet"]
+          ports:
+            - name: http
+              containerPort: 9999
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName

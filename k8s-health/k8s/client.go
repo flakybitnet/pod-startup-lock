@@ -11,8 +11,8 @@ import (
 
 	. "github.com/serhii-samoilenko/pod-startup-lock/common/util"
 	. "github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
+	AppsV1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,10 +35,10 @@ func (c *Client) GetNodeLabels(nodeName string) map[string]string {
 	return node.Labels
 }
 
-func (c *Client) GetDaemonSets(namespace string) []v1beta1.DaemonSet {
+func (c *Client) GetDaemonSets(namespace string) []AppsV1.DaemonSet {
 	daemonSetList := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.ExtensionsV1beta1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
-	})).(*v1beta1.DaemonSetList)
+		return c.k8s.AppsV1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
+	})).(*AppsV1.DaemonSetList)
 	return daemonSetList.Items
 }
 

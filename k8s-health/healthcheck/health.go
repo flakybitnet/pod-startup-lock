@@ -10,10 +10,11 @@ import (
 	"github.com/serhii-samoilenko/pod-startup-lock/common/util"
 	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
 	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/k8s"
-	"k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	"log"
 	"time"
+
+	AppsV1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 type HealthChecker struct {
@@ -59,7 +60,7 @@ func (h *HealthChecker) check() bool {
 	return h.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
-func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []v1beta1.DaemonSet) bool {
+func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {
 	for _, ds := range daemonSets {
 		if required, reason := h.checkRequired(&ds); !required {
 			log.Print(reason)
@@ -77,7 +78,7 @@ func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []v1beta1.DaemonSet) 
 	return true
 }
 
-func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []v1beta1.DaemonSet, pods []v1.Pod) bool {
+func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV1.DaemonSet, pods []v1.Pod) bool {
 	for _, ds := range daemonSets {
 		if required, reason := h.checkRequired(&ds); !required {
 			log.Print(reason)
@@ -98,7 +99,7 @@ func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []v1bet
 	return true
 }
 
-func (h *HealthChecker) checkRequired(ds *v1beta1.DaemonSet) (bool, string) {
+func (h *HealthChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) {
 	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
 	if len(h.conf.ExcludeDs) > 0 && util.MapContainsAnyPair(ds.Labels, h.conf.ExcludeDs) {
 		return false, reason + "matches exclude labels"
@@ -116,7 +117,7 @@ func (h *HealthChecker) checkRequired(ds *v1beta1.DaemonSet) (bool, string) {
 	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)
 }
 
-func findDaemonSetPod(ds *v1beta1.DaemonSet, pods []v1.Pod) (*v1.Pod, bool) {
+func findDaemonSetPod(ds *AppsV1.DaemonSet, pods []v1.Pod) (*v1.Pod, bool) {
 	for _, pod := range pods {
 		if isPodOwnedByDs(&pod, ds) {
 			return &pod, true
@@ -140,7 +141,7 @@ func isPodReady(pod *v1.Pod) bool {
 	return false
 }
 
-func isPodOwnedByDs(pod *v1.Pod, ds *v1beta1.DaemonSet) bool {
+func isPodOwnedByDs(pod *v1.Pod, ds *AppsV1.DaemonSet) bool {
 	for _, ref := range pod.ObjectMeta.OwnerReferences {
 		if ds.ObjectMeta.UID == ref.UID {
 			return true
