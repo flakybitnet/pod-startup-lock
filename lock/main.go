@@ -21,7 +21,7 @@ func main() {
 
 	healthFunc := endpointChecker.HealthFunction()
 	lock := state.NewLock(conf.ParallelLocks)
-	handler := service.NewLockHandler(lock, conf.LockTimeout, healthFunc)
+	handler := service.NewLockHandler(&lock, conf.LockTimeout, healthFunc)
 
 	go service.Run(conf.Host, conf.Port, handler)
 	go endpointChecker.Run()
