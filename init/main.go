@@ -9,11 +9,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
-	"io"
-	"io/ioutil"
 )
 
 const defaultHost = "localhost"
@@ -58,7 +57,7 @@ func acquireLock(client *http.Client, url string) bool {
 		log.Printf("Error occurred: '%v'", err)
 		return false
 	}
-	io.Copy(ioutil.Discard, resp.Body)
+	io.Copy(io.Discard, resp.Body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {

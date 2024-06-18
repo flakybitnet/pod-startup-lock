@@ -8,12 +8,11 @@ package service
 
 import (
 	. "github.com/serhii-samoilenko/pod-startup-lock/lock/config"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"time"
-	"io"
-	"io/ioutil"
 )
 
 const maxIdleConnections = 10
@@ -100,7 +99,7 @@ func checkHttp(endpoint HttpEndpoint) bool {
 		log.Printf("'%v' endpoint connection failed: '%v'", endpoint, err)
 		return false
 	}
-	io.Copy(ioutil.Discard, resp.Body)
+	io.Copy(io.Discard, resp.Body)
 	defer resp.Body.Close()
 
 	if isSuccessful(resp.StatusCode) {

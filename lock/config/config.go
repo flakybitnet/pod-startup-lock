@@ -54,9 +54,9 @@ type Config struct {
 	HealthEndpoints   []Endpoint
 }
 
-func parseEndpoints(vals []string) []Endpoint {
+func parseEndpoints(urls []string) []Endpoint {
 	var endpoints []Endpoint
-	for _, url := range vals {
+	for _, url := range urls {
 		endpoints = append(endpoints, ParseEndpoint(url))
 	}
 	return endpoints
