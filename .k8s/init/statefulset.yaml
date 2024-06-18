@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: database
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  replicas: 1
+  serviceName: postgres
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      name: postgres
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      initContainers:
+        - name: psl
+          # image: <registry>/psl/lock:<version>
+          # image: <registry>/flakybitnet/psl-lock:<version>
+          image: harbor.flakybit.net/psl/init:1.1.0
+          args:
+            - --host
+            - lock.psl.svc.cluster.local
+            - --pause
+            - "5"
+            - --duration
+            - "20"
+          resources:
+            requests:
+              cpu: 20m
+              memory: 4Mi
+            limits:
+              cpu: 100m
+              memory: 8Mi
+      containers:
+        - name: postgres
+          image: public.ecr.aws/docker/library/postgres:16.2-bookworm
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 384Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 512Mi

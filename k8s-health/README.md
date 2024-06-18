@@ -1,13 +1,13 @@
 # Kubernetes DaemonSet health check service
-Typically you would like to postpone application startup until all DaemonSets on Node (or at least mapped to the host network) are ready.
-This util constantly performs DaemonSet heallthcheck and respond with `200 OK` if passed.
+Typically, you would like to postpone application startup until all DaemonSets on Node (or at least mapped to the host network) are ready.
+This util constantly performs DaemonSet healthcheck and respond with `200 OK` if passed.
  
 Just add this service as a dependent endpoint to the Lock service, and lock won't be acquired until DaemonSets are ready.  
 
 ## How it works
 
 ##### 1. Starts and listens for HTTP requests
-Responds with `412 Precondition Failed` until healthckeck succeeds.
+Responds with `412 Precondition Failed` until healthcheck succeeds.
 Binding `host` and `port` are configurable.
 
 ##### 2. Uses Kubernetes API to get a list of DaemonSets required on the same node
@@ -39,17 +39,17 @@ Environment variable `NODE_NAME` must be exposed to indicate which node health s
 ## Additional Configuration
 You may specify additional command line options to override defaults:
 
-| Option        | Default | Description |
-| ------------- |---------| ----------- |
-| `--host`      | 0.0.0.0 | Address to bind |
-| `--port`      | 9999    | Port to bind    |
-| `--baseUrl`   | *none*  | K8s API Base Url. **Only to run in the out-of-cluster mode** |
+| Option        | Default | Description                                                                                  |
+|---------------|---------|----------------------------------------------------------------------------------------------|
+| `--host`      | 0.0.0.0 | Address to bind                                                                              |
+| `--port`      | 9999    | Port to bind                                                                                 |
+| `--baseUrl`   | *none*  | K8s API Base Url. **Only to run in the out-of-cluster mode**                                 |
 | `--namespace` | *none*  | Target K8s namespace where to perform DaemonSets healthcheck. Leave blank for all namespaces |
-| `--hostNet`   |         | Check only DaemonSets bind to the `host network` |
-| `--failHc`    | 10      | Pause between healthchecks if the previous check failed, seconds |
-| `--passHc`    | 60      | Pause between healthchecks if the previous check succeeded, seconds |
-| `--in`        | *none*  | DaemonSet labels to include in healthcheck, Format: `label:value` |
-| `--ex`        | *none*  | DaemonSet labels to exclude from healthcheck, Format: `label:value` |
+| `--hostNet`   |         | Check only DaemonSets bind to the `host network`                                             |
+| `--failHc`    | 10      | Pause between health checks if the previous check failed, seconds                            |
+| `--passHc`    | 60      | Pause between health checks if the previous check succeeded, seconds                         |
+| `--in`        | *none*  | DaemonSet labels to include in healthcheck, Format: `label:value`                            |
+| `--ex`        | *none*  | DaemonSet labels to exclude from healthcheck, Format: `label:value`                          |
 
 ## How to run locally
 Example with some command line options:
@@ -60,32 +60,5 @@ go run k8s-health/main.go --baseUrl http://127.0.0.1:57585 --in app:test --in ve
 ```
 
 ## How to deploy to Kubernetes
-The preferable way is to deploy as a DaemonSet. Sample deployment YAML:
-```yaml
-apiVersion: extensions/v1beta1
-kind: DaemonSet
-metadata:
-  name: startup-lock-k8s-health
-spec:
-  template:
-    metadata:
-      labels:
-        app: startup-lock-k8s-health
-        version: '1.0'
-    spec:
-      hostNetwork: true
-      nodeSelector:
-        kubernetes.io/role: node
-      containers:
-        - name: startup-lock-k8s-health-container
-          image: ssamoilenko/startup-lock-k8s-health
-          args: ["--port", "9999", "--hostNet"]
-          ports:
-            - name: http
-              containerPort: 9999
-          env:
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-```
+The preferable way is to deploy as a DaemonSet.
+You can find example deployment in [.k8s/k8s-health](../.k8s/k8s-health) directory.

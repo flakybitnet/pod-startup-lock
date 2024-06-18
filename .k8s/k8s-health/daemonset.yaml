@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: k8s-health
+  namespace: psl
+  labels:
+    app.kubernetes.io/name: k8s-health
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-health
+  template:
+    metadata:
+      name: k8s-health
+      labels:
+        app.kubernetes.io/name: k8s-health
+    spec:
+      serviceAccountName: k8s-health
+      containers:
+        - name: k8s-health
+          # image: <registry>/psl/k8s-health:<version>
+          # image: <registry>/flakybitnet/psl-k8s-health:<version>
+          image: harbor.flakybit.net/psl/k8s-health:1.1.0
+          args:
+            - --port
+            - "9999"
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: 9999
+          resources:
+            requests:
+              cpu: 20m
+              memory: 16Mi
+            limits:
+              cpu: 1000m
+              memory: 24Mi
+      nodeSelector:
+        kubernetes.io/os: linux # check itself for readiness

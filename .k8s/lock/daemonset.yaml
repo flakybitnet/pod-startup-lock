@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lock
+  namespace: psl
+  labels:
+    app.kubernetes.io/name: lock
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lock
+  template:
+    metadata:
+      name: lock
+      labels:
+        app.kubernetes.io/name: lock
+    spec:
+      containers:
+        - name: lock
+          # image: <registry>/psl/lock:<version>
+          # image: <registry>/flakybitnet/psl-lock:<version>
+          image: harbor.flakybit.net/psl/lock:1.1.0
+          args:
+            - --port
+            - "8888"
+            - --locks
+            - "2"
+            - --timeout
+            - "10"
+            - --check
+            - http://k8s-health.psl.svc.cluster.local:9999
+          ports:
+            - name: http
+              containerPort: 8888
+          resources:
+            requests:
+              cpu: 20m
+              memory: 8Mi
+            limits:
+              cpu: 1000m
+              memory: 12Mi

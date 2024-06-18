@@ -1,4 +1,7 @@
 # Lock service
+Service to manage locks. Releases the lock after configured timeout.
+Uses `k8s-health` service to postpone acquiring the locks.
+`init` container uses this service to acquire the lock.
 
 ## How it works
 
@@ -21,27 +24,27 @@ Client gets `423 Locked` until lock timeout exceeds.
 
 ## Request custom lock duration
 You can configure default lock timeout. But each client may request custom duration with `GET` parameter, for example, 
-`http://localhost:8888?duration=60`
+`http://lock.psl.svc.cluster.local:8888?duration=60`
 To acquire a lock for 60 seconds.
 
 ## Dependent Endpoints check
 This is useful when you need to wait for certain service(s) start before allowing starting of applications in the cluster.
-* You may specify `http/https` endpoint, like `http://myelasticsearch.local:9200`
+* You may specify `http/https` endpoint, like `http://elastic.search.svc.cluster.local:9200`.
   Response with HTTP code `2XX` is considered as a success.
-* You may specify `tcp` endpoint, like `tcp://mymongodb:27017`
+* You may specify `tcp` endpoint, like `tcp://mongodb.database.svc.cluster.local:27017`.
   Established TCP connection is considered as a success.
 
 ## Configuration
 You may specify additional command line options to override defaults:
 
-| Option      | Default | Description |
-| ----------- |---------| ----------- |
-| `--host`    | 0.0.0.0 | Address to bind |
-| `--port`    | 8888    | Port to bind    |
-| `--locks`   | 1       | Number of locks allowed to be acquired at the same time |
-| `--timeout` | 10      | Default time until the acquired lock is released, seconds |
-| `--check`   | *none*  | List of endpoints to check before allow locking, see example below |
-| `--failHc`  | 10      | Pause between endpoint checks if the previous check failed, seconds |
+| Option      | Default | Description                                                            |
+|-------------|---------|------------------------------------------------------------------------|
+| `--host`    | 0.0.0.0 | Address to bind                                                        |
+| `--port`    | 8888    | Port to bind                                                           |
+| `--locks`   | 1       | Number of locks allowed to be acquired at the same time                |
+| `--timeout` | 10      | Default time until the acquired lock is released, seconds              |
+| `--check`   | *none*  | List of endpoints to check before allow locking, see example below     |
+| `--failHc`  | 10      | Pause between endpoint checks if the previous check failed, seconds    |
 | `--passHc`  | 60      | Pause between endpoint checks if the previous check succeeded, seconds |
 
 ## How to run locally
@@ -51,32 +54,5 @@ go run lock/main.go --port 9000 --locks 2 --check http://myelasticsearch:9200 --
 ```
 
 ## How to deploy to Kubernetes
-The preferable way is to deploy as a DaemonSet. Sample deployment YAML (notice checked endpoint):
-```yaml
-apiVersion: extensions/v1beta1
-kind: DaemonSet
-metadata:
-  name: startup-lock
-spec:
-  template:
-    metadata:
-      labels:
-        app: startup-lock
-        version: '1.0'
-    spec:
-      hostNetwork: true
-      nodeSelector:
-        kubernetes.io/role: node
-      containers:
-        - name: startup-lock-container
-          image: ssamoilenko/startup-lock
-          args: ["--port", "8888", "--locks", "1", "--check", "http://$(HOST_IP):9999"]
-          ports:
-            - name: http
-              containerPort: 8888
-          env:
-            - name: HOST_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-```
+The preferable way is to deploy as a DaemonSet.
+You can find example deployment in [.k8s/lock](../.k8s/lock) directory.
