@@ -7,9 +7,9 @@
 package main
 
 import (
-	"github.com/serhii-samoilenko/pod-startup-lock/lock/config"
-	"github.com/serhii-samoilenko/pod-startup-lock/lock/service"
-	"github.com/serhii-samoilenko/pod-startup-lock/lock/state"
+	"flakybit.net/psl/lock/config"
+	"flakybit.net/psl/lock/service"
+	"flakybit.net/psl/lock/state"
 )
 
 func main() {

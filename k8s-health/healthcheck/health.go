@@ -7,10 +7,10 @@
 package healthcheck
 
 import (
+	"flakybit.net/psl/common/util"
+	"flakybit.net/psl/k8s-health/config"
+	"flakybit.net/psl/k8s-health/k8s"
 	"fmt"
-	"github.com/serhii-samoilenko/pod-startup-lock/common/util"
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/k8s"
 	"log"
 	"time"
 

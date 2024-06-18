@@ -10,8 +10,8 @@ import (
 	"context"
 	"log"
 
-	. "github.com/serhii-samoilenko/pod-startup-lock/common/util"
-	. "github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
+	. "flakybit.net/psl/common/util"
+	. "flakybit.net/psl/k8s-health/config"
 	AppsV1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"

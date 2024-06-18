@@ -7,7 +7,7 @@
 package service
 
 import (
-	"github.com/serhii-samoilenko/pod-startup-lock/lock/state"
+	"flakybit.net/psl/lock/state"
 	"net/http"
 	"net/http/httptest"
 	"testing"

@@ -7,10 +7,10 @@
 package main
 
 import (
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/config"
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/healthcheck"
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/k8s"
-	"github.com/serhii-samoilenko/pod-startup-lock/k8s-health/service"
+	"flakybit.net/psl/k8s-health/config"
+	"flakybit.net/psl/k8s-health/healthcheck"
+	"flakybit.net/psl/k8s-health/k8s"
+	"flakybit.net/psl/k8s-health/service"
 )
 
 func main() {

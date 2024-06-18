@@ -7,7 +7,7 @@
 package service
 
 import (
-	. "github.com/serhii-samoilenko/pod-startup-lock/lock/config"
+	. "flakybit.net/psl/lock/config"
 	"io"
 	"log"
 	"net"

@@ -8,7 +8,7 @@ package config
 
 import (
 	"flag"
-	. "github.com/serhii-samoilenko/pod-startup-lock/common/util"
+	. "flakybit.net/psl/common/util"
 	"log"
 	"os"
 	"time"

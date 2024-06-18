@@ -1,4 +1,4 @@
-module github.com/serhii-samoilenko/pod-startup-lock
+module flakybit.net/psl
 
 go 1.22.0
 
