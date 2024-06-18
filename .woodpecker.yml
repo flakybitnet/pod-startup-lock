@@ -1,0 +1,62 @@
+# Environments
+# SKIP_TEST=true|false - skip testing step
+# SKIP_IMAGE=true|false - skip building image
+# APP_TAG=0.0.1 - override CI_COMMIT_TAG var, application release version
+
+variables:
+  - &golang_image 'public.ecr.aws/docker/library/golang:1.22.4-bookworm'
+  - &kaniko_image "gcr.io/kaniko-project/executor:v1.23.1-debug"
+
+matrix:
+  APP_COMPONENT:
+    - init
+    - k8s-health
+    - lock
+
+when:
+  - branch: main
+    event:
+      - push
+      - tag
+      - manual
+
+steps:
+  set-env:
+    image: debian:bookworm-slim
+    commands:
+      - .cicd/set-env.sh
+  test:
+    when:
+      evaluate: 'SKIP_TEST != "true"'
+    image: *golang_image
+    commands:
+      - .cicd/test.sh
+  build:
+    image: *golang_image
+    commands:
+      - .cicd/build.sh
+  image:
+    when:
+      evaluate: 'SKIP_IMAGE != "true"'
+    image: *kaniko_image
+    environment:
+      DOCKER_USR:
+        from_secret: fb_harbor_usr
+      DOCKER_PWD:
+        from_secret: fb_harbor_pwd
+    commands:
+      - .cicd/set-docker-auth.sh
+      - .cicd/image.sh
+  image-debug:
+    when:
+      evaluate: 'SKIP_IMAGE != "true"'
+    image: *kaniko_image
+    environment:
+      IMAGE_DEBUG: true
+      DOCKER_USR:
+        from_secret: fb_harbor_usr
+      DOCKER_PWD:
+        from_secret: fb_harbor_pwd
+    commands:
+      - .cicd/set-docker-auth.sh
+      - .cicd/image.sh
