@@ -98,11 +98,20 @@ The OCI images are available at
 
 ## Release Notes
 
+* `1.1.0`
+  - Migrated to go modules
+  - Updated dependencies
+  - Fixed K8s API
+  - Releasing on multiple registries
+  - Building debug images
+  - Updated documentation with examples
+  - Updated copyright and module name
+  - Migrated to Woodpecker CI
 * `1.0.1`
-    - Added connection timeouts for http and tcp connections
-    - Added keep-alive for http connections
+  - Added connection timeouts for http and tcp connections
+  - Added keep-alive for http connections
 * `1.0.0`
-    - Initial version
+  - Initial version
     
 ## Contributing
 
