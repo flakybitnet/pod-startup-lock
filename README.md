@@ -41,6 +41,23 @@ See Readmes in subfolders for details.
   Optional component. Performs healthcheck of Kubernetes DaemonSets.
   May be used by Lock service to postpone lock acquiring until all DaemonSets on the Node are up and running.
 
+## Images
+
+The OCI images are available at 
+* **Quay**
+  * [K8s health](https://quay.io/repository/flakybitnet/psl-k8s-health)
+  * [Lock](https://quay.io/repository/flakybitnet/psl-lock)
+  * [Init](https://quay.io/repository/flakybitnet/psl-init)
+* **GHCR**
+  * [K8s health](https://github.com/flakybitnet/pod-startup-lock/pkgs/container/psl-k8s-health)
+  * [Lock](https://github.com/flakybitnet/pod-startup-lock/pkgs/container/psl-lock)
+  * [Init](https://github.com/flakybitnet/pod-startup-lock/pkgs/container/psl-init)
+* **AWS ECR Public**
+  * [K8s health](https://gallery.ecr.aws/flakybitnet/psl/k8s-health)
+  * [Lock](https://gallery.ecr.aws/flakybitnet/psl/lock)
+  * [Init](https://gallery.ecr.aws/flakybitnet/psl/init)
+* **FlakyBit's Harbor**
+
 ## How to build locally
 
 1.  Set target platform for Go binaries.
