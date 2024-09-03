@@ -7,10 +7,11 @@
 # APP_TAG=0.0.1 - override CI_COMMIT_TAG var, application release version
 
 variables:
-  - &golang_image 'public.ecr.aws/docker/library/golang:1.22.4-bookworm'
-  - &kaniko_image "gcr.io/kaniko-project/executor:v1.23.1-debug"
-  - &skopeo_image "quay.io/containers/skopeo:v1.15.1"
-  - &awscli_image "public.ecr.aws/aws-cli/aws-cli:2.15.62"
+  - &debian_image 'public.ecr.aws/docker/library/debian:bookworm-slim'
+  - &golang_image 'public.ecr.aws/docker/library/golang:1.22.6-bookworm'
+  - &kaniko_image "gcr.io/kaniko-project/executor:v1.23.2-debug"
+  - &skopeo_image "quay.io/containers/skopeo:v1.15.2"
+  - &awscli_image "public.ecr.aws/aws-cli/aws-cli:2.17.42"
 
 matrix:
   APP_COMPONENT:
@@ -30,10 +31,13 @@ when:
       - push
 
 steps:
+  # prepare
   set-env:
-    image: debian:bookworm-slim
+    image: *debian_image
     commands:
       - .cicd/set-env.sh
+
+  # build & test
   test:
     when:
       evaluate: 'SKIP_TEST != "true"'
@@ -44,6 +48,8 @@ steps:
     image: *golang_image
     commands:
       - .cicd/build.sh
+
+  # image
   image:
     when:
       evaluate: 'SKIP_IMAGE != "true"'
@@ -69,6 +75,8 @@ steps:
     commands:
       - .cicd/set-docker-auth.sh
       - .cicd/image.sh
+
+  # publish external
   publish-quay:
     when:
       evaluate: 'SKIP_PUBLISH_QUAY != "true"'
