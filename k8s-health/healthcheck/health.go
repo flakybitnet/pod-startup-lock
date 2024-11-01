@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"log"
+	"math"
 	"time"
 
 	AppsV1 "k8s.io/api/apps/v1"
@@ -63,10 +64,11 @@ func (h *HealthChecker) Run() {
 
 func (h *HealthChecker) check() bool {
 	log.Print("---")
-	log.Print("Node CPU usage:")
 	metrics := h.k8s.GetNodeMetrics(h.conf.NodeName)
-	cpuUsage := metrics.Usage.Cpu()
-	log.Print(cpuUsage.String())
+	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
+	cpuUsageShare := float64(cpuUsageMilli) / float64(h.nodeCpuCapacity.MilliValue())
+	cpuUsagePct := int64(math.Round(cpuUsageShare * 100))
+	log.Printf("Node CPU usage: %dm, %d%", cpuUsageMilli, cpuUsagePct)
 
 	log.Print("HealthCheck:")
 	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
