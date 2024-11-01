@@ -64,11 +64,12 @@ func (h *HealthChecker) Run() {
 
 func (h *HealthChecker) check() bool {
 	log.Print("---")
-	metrics := h.k8s.GetNodeMetrics(h.conf.NodeName)
-	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
-	cpuUsageShare := float64(cpuUsageMilli) / float64(h.nodeCpuCapacity.MilliValue())
-	cpuUsagePct := int64(math.Round(cpuUsageShare * 100))
-	log.Printf("Node CPU usage: %dm, %d%", cpuUsageMilli, cpuUsagePct)
+	if h.conf.NodeCpuLoadThreshold > 0 { // enabled
+		loadCheckPassed := h.checkNodeCpuLoad()
+		if !loadCheckPassed {
+			return false
+		}
+	}
 
 	log.Print("HealthCheck:")
 	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
@@ -77,6 +78,20 @@ func (h *HealthChecker) check() bool {
 	}
 	nodePods := h.k8s.GetNodePods(h.conf.NodeName)
 	return h.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
+}
+
+func (h *HealthChecker) checkNodeCpuLoad() bool {
+	metrics := h.k8s.GetNodeMetrics(h.conf.NodeName)
+	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
+	cpuUsageShare := float64(cpuUsageMilli) / float64(h.nodeCpuCapacity.MilliValue())
+	cpuUsagePct := int(math.Round(cpuUsageShare * 100))
+	log.Printf("Node CPU usage: %dm, %d%%", cpuUsageMilli, cpuUsagePct)
+
+	if cpuUsagePct > h.conf.NodeCpuLoadThreshold {
+		log.Printf("Node overload: Desired: %d%%, Current: %d%%", h.conf.NodeCpuLoadThreshold, cpuUsagePct)
+		return false
+	}
+	return true
 }
 
 func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {

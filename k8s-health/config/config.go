@@ -14,9 +14,12 @@ import (
 	"time"
 )
 
-const defaultPort = 9999
-const defaultFailTimeout = 10
-const defaultPassTimeout = 60
+const (
+	defaultPort             = 9999
+	defaultFailTimeout      = 10
+	defaultPassTimeout      = 60
+	defaultCpuLoadThreshold = 0
+)
 
 func Parse() Config {
 	host := flag.String("host", "", "Host/Ip to bind")
@@ -26,6 +29,7 @@ func Parse() Config {
 	failTimeout := flag.Int("failHc", defaultFailTimeout, "Pause between DaemonSet health checks if previous failed, sec")
 	passTimeout := flag.Int("passHc", defaultPassTimeout, "Pause between DaemonSet health checks if previous succeeded, sec")
 	hostNetwork := flag.Bool("hostNet", false, "Host network DaemonSets only")
+	cpuLoadThreshold := flag.Int("cpuLoadThreshold", defaultCpuLoadThreshold, "Node CPU load above which health check fails and below passes, percentage")
 
 	nodeName, _ := os.LookupEnv("NODE_NAME")
 
@@ -43,6 +47,7 @@ func Parse() Config {
 		time.Duration(*failTimeout) * time.Second,
 		time.Duration(*passTimeout) * time.Second,
 		nodeName,
+		*cpuLoadThreshold,
 		*hostNetwork,
 		includeDs.Get(),
 		excludeDs.Get(),
@@ -53,16 +58,17 @@ func Parse() Config {
 }
 
 type Config struct {
-	Host              string
-	Port              int
-	K8sApiBaseUrl     string
-	Namespace         string
-	HealthFailTimeout time.Duration
-	HealthPassTimeout time.Duration
-	NodeName          string
-	HostNetworkDs     bool
-	IncludeDs         []Pair
-	ExcludeDs         []Pair
+	Host                 string
+	Port                 int
+	K8sApiBaseUrl        string
+	Namespace            string
+	HealthFailTimeout    time.Duration
+	HealthPassTimeout    time.Duration
+	NodeName             string
+	NodeCpuLoadThreshold int
+	HostNetworkDs        bool
+	IncludeDs            []Pair
+	ExcludeDs            []Pair
 }
 
 func (c *Config) Validate() {
@@ -71,5 +77,8 @@ func (c *Config) Validate() {
 	}
 	if len(c.IncludeDs) > 0 && len(c.ExcludeDs) > 0 {
 		log.Panic("Cannot specify both Included and Excluded DaemonSet labels, choose one")
+	}
+	if c.NodeCpuLoadThreshold < 0 {
+		log.Panic("Node CPU load threshold lesser than 0")
 	}
 }
