@@ -11,6 +11,7 @@ import (
 	"flakybit.net/psl/k8s-health/config"
 	"flakybit.net/psl/k8s-health/k8s"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"log"
 	"time"
 
@@ -19,15 +20,25 @@ import (
 )
 
 type HealthChecker struct {
-	k8s        *k8s.Client
-	conf       config.Config
-	nodeLabels map[string]string
-	isHealthy  bool
+	k8s             *k8s.Client
+	conf            config.Config
+	nodeLabels      map[string]string
+	nodeCpuCapacity resource.Quantity
+	isHealthy       bool
 }
 
 func NewHealthChecker(appConfig config.Config, k8s *k8s.Client) *HealthChecker {
-	nodeLabels := k8s.GetNodeLabels(appConfig.NodeName)
-	return &HealthChecker{k8s, appConfig, nodeLabels, false}
+	nodeInfo := k8s.GetNodeInfo(appConfig.NodeName)
+	cpuCap := nodeInfo.Status.Capacity.Cpu()
+	log.Printf("Node CPU capacity: %s", cpuCap.String())
+
+	return &HealthChecker{
+		k8s,
+		appConfig,
+		nodeInfo.Labels,
+		*cpuCap,
+		false,
+	}
 }
 
 func (h *HealthChecker) HealthFunction() func() bool {
@@ -52,11 +63,11 @@ func (h *HealthChecker) Run() {
 
 func (h *HealthChecker) check() bool {
 	log.Print("---")
-	log.Print("NodeUsage:")
-	usage := h.k8s.GetNodeUsage(h.conf.NodeName)
-	log.Print(usage)
+	log.Print("Node CPU usage:")
+	metrics := h.k8s.GetNodeMetrics(h.conf.NodeName)
+	cpuUsage := metrics.Usage.Cpu()
+	log.Print(cpuUsage.String())
 
-	log.Print("---")
 	log.Print("HealthCheck:")
 	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
 	if h.checkAllDaemonSetsReady(daemonSets) {

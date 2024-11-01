@@ -33,11 +33,18 @@ func NewClient(appConfig Config) *Client {
 	return &Client{k8sClient, metricsClient}
 }
 
-func (c *Client) GetNodeLabels(nodeName string) map[string]string {
+func (c *Client) GetNodeInfo(nodeName string) *v1.Node {
 	node := (*RetryOrPanicDefault(func() (interface{}, error) {
 		return c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
 	})).(*v1.Node)
-	return node.Labels
+	return node
+}
+
+func (c *Client) GetNodeMetrics(nodeName string) *v1beta1.NodeMetrics {
+	metrics := (*RetryOrPanicDefault(func() (interface{}, error) {
+		return c.metrics.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, meta.GetOptions{})
+	})).(*v1beta1.NodeMetrics)
+	return metrics
 }
 
 func (c *Client) GetDaemonSets(namespace string) []AppsV1.DaemonSet {
@@ -55,13 +62,6 @@ func (c *Client) GetNodePods(nodeName string) []v1.Pod {
 		return c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
 	})).(*v1.PodList)
 	return podList.Items
-}
-
-func (c *Client) GetNodeUsage(nodeName string) *v1.ResourceList {
-	metrics := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.metrics.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, meta.GetOptions{})
-	})).(*v1beta1.NodeMetrics)
-	return &metrics.Usage
 }
 
 func getK8sConfig(appConfig Config) *rest.Config {
