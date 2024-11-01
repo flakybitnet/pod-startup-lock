@@ -18,11 +18,14 @@ func main() {
 	conf.Validate()
 
 	k8sClient := k8s.NewClient(conf)
-	endpointChecker := healthcheck.NewHealthChecker(conf, k8sClient)
-	srv := service.NewService(conf.Host, conf.Port, endpointChecker.HealthFunction())
+	healthChecker := healthcheck.NewHealthChecker(conf, k8sClient)
+	srv := service.NewService(conf.Host, conf.Port, healthChecker.HealthFunction())
 
 	go srv.Run()
-	go endpointChecker.Run()
+	go healthChecker.RunDaemonSetsChecks()
+	if conf.NodeCpuLoadThreshold > 0 { // enabled
+		go healthChecker.RunLoadChecks()
+	}
 
 	select {} // Wait forever and let child goroutines run
 }

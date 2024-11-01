@@ -25,7 +25,8 @@ type HealthChecker struct {
 	conf            config.Config
 	nodeLabels      map[string]string
 	nodeCpuCapacity resource.Quantity
-	isHealthy       bool
+	isDsHealthy     bool
+	isLoadHealthy   bool
 }
 
 func NewHealthChecker(appConfig config.Config, k8s *k8s.Client) *HealthChecker {
@@ -39,48 +40,45 @@ func NewHealthChecker(appConfig config.Config, k8s *k8s.Client) *HealthChecker {
 		nodeInfo.Labels,
 		*cpuCap,
 		false,
+		false,
 	}
 }
 
 func (h *HealthChecker) HealthFunction() func() bool {
 	return func() bool {
-		return h.isHealthy
+		return h.isLoadHealthy && h.isDsHealthy
 	}
 }
 
-func (h *HealthChecker) Run() {
+func (h *HealthChecker) RunDaemonSetsChecks() {
 	for {
-		if h.check() {
+		if h.checkDaemonSets() {
 			log.Print("HealthCheck passed")
-			h.isHealthy = true
+			h.isDsHealthy = true
 			time.Sleep(h.conf.HealthPassTimeout)
 		} else {
 			log.Print("HealthCheck failed")
-			h.isHealthy = false
+			h.isDsHealthy = false
 			time.Sleep(h.conf.HealthFailTimeout)
 		}
 	}
 }
 
-func (h *HealthChecker) check() bool {
-	log.Print("---")
-	if h.conf.NodeCpuLoadThreshold > 0 { // enabled
-		loadCheckPassed := h.checkNodeCpuLoad()
-		if !loadCheckPassed {
-			return false
+func (h *HealthChecker) RunLoadChecks() {
+	for {
+		if h.checkNodeCpuLoad() {
+			log.Print("HealthCheck passed")
+			h.isLoadHealthy = true
+		} else {
+			log.Print("HealthCheck failed")
+			h.isLoadHealthy = false
 		}
+		time.Sleep(h.conf.NodeLoadHealthPeriod)
 	}
-
-	log.Print("HealthCheck:")
-	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
-	if h.checkAllDaemonSetsReady(daemonSets) {
-		return true
-	}
-	nodePods := h.k8s.GetNodePods(h.conf.NodeName)
-	return h.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
 func (h *HealthChecker) checkNodeCpuLoad() bool {
+	log.Print("---")
 	metrics := h.k8s.GetNodeMetrics(h.conf.NodeName)
 	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
 	cpuUsageShare := float64(cpuUsageMilli) / float64(h.nodeCpuCapacity.MilliValue())
@@ -92,6 +90,17 @@ func (h *HealthChecker) checkNodeCpuLoad() bool {
 		return false
 	}
 	return true
+}
+
+func (h *HealthChecker) checkDaemonSets() bool {
+	log.Print("---")
+	log.Print("HealthCheck:")
+	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
+	if h.checkAllDaemonSetsReady(daemonSets) {
+		return true
+	}
+	nodePods := h.k8s.GetNodePods(h.conf.NodeName)
+	return h.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
 func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {

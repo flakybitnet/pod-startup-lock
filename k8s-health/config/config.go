@@ -19,6 +19,7 @@ const (
 	defaultFailTimeout      = 10
 	defaultPassTimeout      = 60
 	defaultCpuLoadThreshold = 0
+	defaultCpuLoadPeriod    = 10
 )
 
 func Parse() Config {
@@ -30,6 +31,7 @@ func Parse() Config {
 	passTimeout := flag.Int("passHc", defaultPassTimeout, "Pause between DaemonSet health checks if previous succeeded, sec")
 	hostNetwork := flag.Bool("hostNet", false, "Host network DaemonSets only")
 	cpuLoadThreshold := flag.Int("cpuLoadThreshold", defaultCpuLoadThreshold, "Node CPU load above which health check fails and below passes, percentage")
+	cpuLoadPeriod := flag.Int("cpuLoadPeriod", defaultCpuLoadPeriod, "Pause between Node CPU load health checks, sec")
 
 	nodeName, _ := os.LookupEnv("NODE_NAME")
 
@@ -48,6 +50,7 @@ func Parse() Config {
 		time.Duration(*passTimeout) * time.Second,
 		nodeName,
 		*cpuLoadThreshold,
+		time.Duration(*cpuLoadPeriod) * time.Second,
 		*hostNetwork,
 		includeDs.Get(),
 		excludeDs.Get(),
@@ -66,6 +69,7 @@ type Config struct {
 	HealthPassTimeout    time.Duration
 	NodeName             string
 	NodeCpuLoadThreshold int
+	NodeLoadHealthPeriod time.Duration
 	HostNetworkDs        bool
 	IncludeDs            []Pair
 	ExcludeDs            []Pair
