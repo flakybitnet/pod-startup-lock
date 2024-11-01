@@ -52,6 +52,11 @@ func (h *HealthChecker) Run() {
 
 func (h *HealthChecker) check() bool {
 	log.Print("---")
+	log.Print("NodeUsage:")
+	usage := h.k8s.GetNodeUsage(h.conf.NodeName)
+	log.Print(usage)
+
+	log.Print("---")
 	log.Print("HealthCheck:")
 	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
 	if h.checkAllDaemonSetsReady(daemonSets) {

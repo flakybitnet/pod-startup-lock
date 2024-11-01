@@ -8,6 +8,7 @@ package k8s
 
 import (
 	"context"
+	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"log"
 
 	. "flakybit.net/psl/common/util"
@@ -17,16 +18,19 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 type Client struct {
-	k8s kubernetes.Clientset
+	k8s     kubernetes.Clientset
+	metrics metricsv.Clientset
 }
 
 func NewClient(appConfig Config) *Client {
 	k8sConfig := getK8sConfig(appConfig)
 	k8sClient := *kubernetes.NewForConfigOrDie(k8sConfig)
-	return &Client{k8sClient}
+	metricsClient := *metricsv.NewForConfigOrDie(k8sConfig)
+	return &Client{k8sClient, metricsClient}
 }
 
 func (c *Client) GetNodeLabels(nodeName string) map[string]string {
@@ -51,6 +55,13 @@ func (c *Client) GetNodePods(nodeName string) []v1.Pod {
 		return c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
 	})).(*v1.PodList)
 	return podList.Items
+}
+
+func (c *Client) GetNodeUsage(nodeName string) *v1.ResourceList {
+	metrics := (*RetryOrPanicDefault(func() (interface{}, error) {
+		return c.metrics.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, meta.GetOptions{})
+	})).(*v1beta1.NodeMetrics)
+	return &metrics.Usage
 }
 
 func getK8sConfig(appConfig Config) *rest.Config {
