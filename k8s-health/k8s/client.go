@@ -40,16 +40,28 @@ package k8s
 
 import (
 	"context"
-	"log"
-
-	. "flakybit.net/psl/common/util"
 	. "flakybit.net/psl/k8s-health/config"
-	AppsV1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
+	"log"
+	"time"
 )
+
+var defaultRetry = wait.Backoff{
+	Duration: 1 * time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
+	Steps:    5,
+}
+
+var defaultRetriable = func(error) bool {
+	return true
+}
 
 type Client struct {
 	k8s kubernetes.Clientset
@@ -62,27 +74,36 @@ func NewClient(appConfig Config) *Client {
 }
 
 func (c *Client) GetNodeLabels(nodeName string) map[string]string {
-	node := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
-	})).(*v1.Node)
+	var node *core.Node
+	retryOnError(func() error {
+		var err error
+		node, err = c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
+		return err
+	})
 	return node.Labels
 }
 
-func (c *Client) GetDaemonSets(namespace string) []AppsV1.DaemonSet {
-	daemonSetList := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.AppsV1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
-	})).(*AppsV1.DaemonSetList)
-	return daemonSetList.Items
+func (c *Client) GetDaemonSets(namespace string) []apps.DaemonSet {
+	var daemonSets *apps.DaemonSetList
+	retryOnError(func() error {
+		var err error
+		daemonSets, err = c.k8s.AppsV1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
+		return err
+	})
+	return daemonSets.Items
 }
 
-func (c *Client) GetNodePods(nodeName string) []v1.Pod {
+func (c *Client) GetNodePods(nodeName string) []core.Pod {
 	opt := meta.ListOptions{}
 	opt.FieldSelector = "spec.nodeName=" + nodeName
 
-	podList := (*RetryOrPanicDefault(func() (interface{}, error) {
-		return c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
-	})).(*v1.PodList)
-	return podList.Items
+	var pods *core.PodList
+	retryOnError(func() error {
+		var err error
+		pods, err = c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
+		return err
+	})
+	return pods.Items
 }
 
 func getK8sConfig(appConfig Config) *rest.Config {
@@ -92,10 +113,19 @@ func getK8sConfig(appConfig Config) *rest.Config {
 		config.Host = appConfig.K8sApiBaseUrl
 		config.Insecure = true
 		return &config
-	} else {
-		log.Printf("Using in-cluster k8s client config")
-		config, err := rest.InClusterConfig()
-		PanicOnError(err)
-		return config
+	}
+
+	log.Printf("Using in-cluster k8s client config")
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
+
+func retryOnError(fn func() error) {
+	err := retry.OnError(defaultRetry, defaultRetriable, fn)
+	if err != nil {
+		panic(err)
 	}
 }
