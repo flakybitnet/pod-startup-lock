@@ -12,83 +12,69 @@ See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with this program.
 If not, see <https://www.gnu.org/licenses/>.
-
-This file incorporates work covered by the following copyright and permission notice:
-	Copyright (c) 2018, Oath Inc.
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
-
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
 */
 
 package config
 
 import (
-	"flag"
-	"flakybit.net/psl/common/util"
-	"log"
+	"context"
+	"github.com/sethvargo/go-envconfig"
+	log "log/slog"
+	"os"
 	"time"
 )
 
-const defaultPort = 8888
-const defaultParallelLocks = 1
-const defaultLockTimeout = 10
-const defaultFailTimeout = 10
-const defaultPassTimeout = 60
-
-func Parse() Config {
-	host := flag.String("host", "", "Host/Ip to bind")
-	port := flag.Int("port", defaultPort, "Port to bind")
-	parallelLocks := flag.Int("locks", defaultParallelLocks, "Count of locks allowed to acquire in parallel")
-	lockTimeout := flag.Int("timeout", defaultLockTimeout, "Default lock timeout, sec")
-	failTimeout := flag.Int("failHc", defaultFailTimeout, "Pause between endpoint health checks if previous failed, sec")
-	passTimeout := flag.Int("passHc", defaultPassTimeout, "Pause between endpoint health checks if previous succeeded, sec")
-
-	var healthEndpoints util.ArrayVal
-	flag.Var(&healthEndpoints, "check", "HealthCheck tcp endpoint, host:port")
-	flag.Parse()
-
-	config := Config{
-		*host,
-		*port,
-		*parallelLocks,
-		time.Duration(*lockTimeout) * time.Second,
-		time.Duration(*failTimeout) * time.Second,
-		time.Duration(*passTimeout) * time.Second,
-		parseEndpoints(healthEndpoints),
-	}
-	log.Printf("Application config:\n%+v", config)
-	return config
-}
-
 type Config struct {
-	Host              string
-	Port              int
-	ParallelLocks     int
-	LockTimeout       time.Duration
-	HealthFailTimeout time.Duration
-	HealthPassTimeout time.Duration
-	HealthEndpoints   []Endpoint
+	BindHost      string            `env:"PSL_BIND_HOST"`                  // Host/Ip to bind
+	BindPort      int               `env:"PSL_BIND_PORT, default=8080"`    // Port to bind
+	ParallelLocks int               `env:"PSL_PARALLEL_LOCKS, default=1"`  // Number of locks allowed to acquire simultaneously
+	LockDuration  time.Duration     `env:"PSL_LOCK_DURATION, default=10s"` // Default lock duration
+	HealthCheck   HealthCheckConfig `env:", prefix=PSL_HC_"`
 }
 
-func parseEndpoints(urls []string) []Endpoint {
-	var endpoints []Endpoint
-	for _, url := range urls {
-		endpoints = append(endpoints, ParseEndpoint(url))
+type HealthCheckConfig struct {
+	Enabled      bool          `env:"ENABLED, default=false"`
+	Endpoints    []string      `env:"ENDPOINTS"`                // Health check tcp endpoint, host:port
+	PeriodOnFail time.Duration `env:"PERIOD_FAIL, default=10s"` // Pause between endpoint health checks if previous failed
+	PeriodOnPass time.Duration `env:"PERIOD_PASS, default=60s"` // Pause between endpoint health checks if previous succeeded
+}
+
+func NewConfig(ctx context.Context) Config {
+	var conf Config
+	err := envconfig.Process(ctx, &conf)
+	if err != nil {
+		log.Error("cannot not process configuration", err)
+		os.Exit(1)
 	}
-	return endpoints
+	valid := conf.validate()
+	if !valid {
+		os.Exit(1)
+	}
+	log.Info("application configured", log.Any("config", conf))
+	return conf
+}
+
+func (c *Config) validate() bool {
+	valid := true
+	if c.ParallelLocks < 1 {
+		log.Error("parallel locks is lesser than 0")
+		valid = false
+	}
+	if c.LockDuration < 0 {
+		log.Error("lock duration is lesser than 0")
+		valid = false
+	}
+	if c.HealthCheck.PeriodOnPass < 0 {
+		log.Error("period on pass is lesser than 0")
+		valid = false
+	}
+	if c.HealthCheck.PeriodOnFail < 0 {
+		log.Error("period on fail is lesser than 0")
+		valid = false
+	}
+	if c.HealthCheck.Enabled && len(c.HealthCheck.Endpoints) == 0 {
+		log.Error("endpoints health check is enabled, but endpoint list is empty")
+		valid = false
+	}
+	return valid
 }

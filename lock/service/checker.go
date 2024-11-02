@@ -61,14 +61,14 @@ var dialer = &net.Dialer{
 }
 
 type EndpointChecker struct {
+	endpoints  []Endpoint
 	waitOnPass time.Duration
 	waitOnFail time.Duration
-	endpoints  []Endpoint
 	isHealthy  bool
 }
 
-func NewEndpointChecker(waitOnPass time.Duration, waitOnFail time.Duration, endpoints []Endpoint) EndpointChecker {
-	return EndpointChecker{waitOnPass, waitOnFail, endpoints, false}
+func NewEndpointChecker(endpoints []Endpoint, waitOnPass, waitOnFail time.Duration) EndpointChecker {
+	return EndpointChecker{endpoints, waitOnPass, waitOnFail, false}
 }
 
 func (c *EndpointChecker) HealthFunction() func() bool {

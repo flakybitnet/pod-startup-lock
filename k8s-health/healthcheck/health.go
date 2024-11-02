@@ -73,11 +73,11 @@ func (h *HealthChecker) Run() {
 		if h.check() {
 			log.Print("HealthCheck passed")
 			h.isHealthy = true
-			time.Sleep(h.conf.HealthPassTimeout)
+			time.Sleep(h.conf.DaemonSetHC.PeriodOnPass)
 		} else {
 			log.Print("HealthCheck failed")
 			h.isHealthy = false
-			time.Sleep(h.conf.HealthFailTimeout)
+			time.Sleep(h.conf.DaemonSetHC.PeriodOnPass)
 		}
 	}
 }
@@ -85,7 +85,7 @@ func (h *HealthChecker) Run() {
 func (h *HealthChecker) check() bool {
 	log.Print("---")
 	log.Print("HealthCheck:")
-	daemonSets := h.k8s.GetDaemonSets(h.conf.Namespace)
+	daemonSets := h.k8s.GetDaemonSets(h.conf.DaemonSetHC.Namespace)
 	if h.checkAllDaemonSetsReady(daemonSets) {
 		return true
 	}
@@ -134,13 +134,13 @@ func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV
 
 func (h *HealthChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) {
 	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
-	if len(h.conf.ExcludeDs) > 0 && util.MapContainsAnyPair(ds.Labels, h.conf.ExcludeDs) {
+	if len(h.conf.DaemonSetHC.Exclude) > 0 && util.MapContainsAny(ds.Labels, h.conf.DaemonSetHC.Exclude) {
 		return false, reason + "matches exclude labels"
 	}
-	if len(h.conf.IncludeDs) > 0 && !util.MapContainsAllPairs(ds.Labels, h.conf.IncludeDs) {
+	if len(h.conf.DaemonSetHC.Include) > 0 && !util.MapContainsAll(ds.Labels, h.conf.DaemonSetHC.Include) {
 		return false, reason + "not matches include labels"
 	}
-	if h.conf.HostNetworkDs && !ds.Spec.Template.Spec.HostNetwork {
+	if h.conf.DaemonSetHC.HostNetwork && !ds.Spec.Template.Spec.HostNetwork {
 		return false, reason + "not on host network"
 	}
 	nodeSelector := ds.Spec.Template.Spec.NodeSelector

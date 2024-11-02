@@ -107,10 +107,10 @@ func (c *Client) GetNodePods(nodeName string) []core.Pod {
 }
 
 func getK8sConfig(appConfig Config) *rest.Config {
-	if appConfig.K8sApiBaseUrl != "" {
+	if appConfig.K8sApiUrl != "" {
 		log.Printf("K8s baseUrl overrided! Using out-of-cluster k8s client config")
 		config := rest.Config{}
-		config.Host = appConfig.K8sApiBaseUrl
+		config.Host = appConfig.K8sApiUrl
 		config.Insecure = true
 		return &config
 	}

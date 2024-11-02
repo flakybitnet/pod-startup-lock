@@ -12,95 +12,64 @@ See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with this program.
 If not, see <https://www.gnu.org/licenses/>.
-
-This file incorporates work covered by the following copyright and permission notice:
-	Copyright (c) 2018, Oath Inc.
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
-
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
 */
 
 package config
 
 import (
-	"flag"
-	. "flakybit.net/psl/common/util"
-	"log"
+	"context"
+	"github.com/sethvargo/go-envconfig"
+	log "log/slog"
 	"os"
 	"time"
 )
 
-const defaultPort = 9999
-const defaultFailTimeout = 10
-const defaultPassTimeout = 60
-
-func Parse() Config {
-	host := flag.String("host", "", "Host/Ip to bind")
-	port := flag.Int("port", defaultPort, "Port to bind")
-	baseUrl := flag.String("baseUrl", "", "K8s api base url. For out-of-cluster usage only")
-	namespace := flag.String("namespace", "", "K8s Namespace to check DaemonSets in. Blank for all namespaces")
-	failTimeout := flag.Int("failHc", defaultFailTimeout, "Pause between DaemonSet health checks if previous failed, sec")
-	passTimeout := flag.Int("passHc", defaultPassTimeout, "Pause between DaemonSet health checks if previous succeeded, sec")
-	hostNetwork := flag.Bool("hostNet", false, "Host network DaemonSets only")
-
-	nodeName, _ := os.LookupEnv("NODE_NAME")
-
-	includeDs := NewPairArrayVal(":")
-	flag.Var(&includeDs, "in", "Include DaemonSet labels, label:value")
-	excludeDs := NewPairArrayVal(":")
-	flag.Var(&excludeDs, "ex", "Exclude DaemonSet labels, label:value")
-	flag.Parse()
-
-	config := Config{
-		*host,
-		*port,
-		*baseUrl,
-		*namespace,
-		time.Duration(*failTimeout) * time.Second,
-		time.Duration(*passTimeout) * time.Second,
-		nodeName,
-		*hostNetwork,
-		includeDs.Get(),
-		excludeDs.Get(),
-	}
-	log.Printf("Application config:\n%+v", config)
-	config.Validate()
-	return config
-}
-
 type Config struct {
-	Host              string
-	Port              int
-	K8sApiBaseUrl     string
-	Namespace         string
-	HealthFailTimeout time.Duration
-	HealthPassTimeout time.Duration
-	NodeName          string
-	HostNetworkDs     bool
-	IncludeDs         []Pair
-	ExcludeDs         []Pair
+	BindHost    string                     `env:"PSL_BIND_HOST"`               // Host/Ip to bind
+	BindPort    int                        `env:"PSL_BIND_PORT, default=8080"` // Port to bind
+	NodeName    string                     `env:"PSL_NODE_NAME, required"`     // K8s node name which the current app instance runs on
+	K8sApiUrl   string                     `env:"PSL_K8S_API_URL"`             // K8s API URL, for out-of-cluster usage only
+	DaemonSetHC DaemonSetHealthCheckConfig `env:", prefix=PSL_HC_DAEMONSET_"`
 }
 
-func (c *Config) Validate() {
-	if c.NodeName == "" {
-		log.Panic("NODE_NAME not specified")
+type DaemonSetHealthCheckConfig struct {
+	Enabled      bool              `env:"ENABLED, default=true"`
+	Namespace    string            `env:"NAMESPACE"`                   // K8s Namespace to check DaemonSets in, blank for all namespaces
+	HostNetwork  bool              `env:"HOST_NETWORK, default=false"` // Host network DaemonSets only
+	Include      map[string]string `env:"INCLUDE_LABELS"`              // Include DaemonSet labels, label:value
+	Exclude      map[string]string `env:"EXCLUDE_LABELS"`              // Exclude DaemonSet labels, label:value
+	PeriodOnFail time.Duration     `env:"PERIOD_FAIL, default=10s"`    // Pause between DaemonSet health checks if previous failed
+	PeriodOnPass time.Duration     `env:"PERIOD_PASS, default=60s"`    // Pause between DaemonSet health checks if previous succeeded
+}
+
+func NewConfig(ctx context.Context) Config {
+	var conf Config
+	err := envconfig.Process(ctx, &conf)
+	if err != nil {
+		log.Error("cannot not process configuration", err)
+		os.Exit(1)
 	}
-	if len(c.IncludeDs) > 0 && len(c.ExcludeDs) > 0 {
-		log.Panic("Cannot specify both Included and Excluded DaemonSet labels, choose one")
+	valid := conf.validate()
+	if !valid {
+		os.Exit(1)
 	}
+	log.Info("application configured", log.Any("config", conf))
+	return conf
+}
+
+func (c *Config) validate() bool {
+	valid := true
+	if len(c.DaemonSetHC.Include) > 0 && len(c.DaemonSetHC.Exclude) > 0 {
+		log.Error("cannot specify both Included and Excluded DaemonSet labels, choose one")
+		valid = false
+	}
+	if c.DaemonSetHC.PeriodOnPass < 0 {
+		log.Error("period on pass is lesser than 0")
+		valid = false
+	}
+	if c.DaemonSetHC.PeriodOnFail < 0 {
+		log.Error("period on fail is lesser than 0")
+		valid = false
+	}
+	return valid
 }

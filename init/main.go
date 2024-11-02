@@ -38,51 +38,58 @@ This file incorporates work covered by the following copyright and permission no
 package main
 
 import (
-	"flag"
+	"context"
+	"flakybit.net/psl/init/config"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
-const defaultHost = "localhost"
-const defaultPort = 8888
-const defaultPause = 1
-const defaultTimeout = 0
-
 const maxIdleConnections = 1
-const requestTimeout = 1 * time.Second
 
 func main() {
-	host := flag.String("host", defaultHost, "Lock service host")
-	port := flag.Int("port", defaultPort, "Lock service port")
-	duration := flag.Int("duration", defaultTimeout, "Custom lock duration to request, sec")
-	pauseSec := flag.Int("pause", defaultPause, "Pause between lock attempts, sec")
-	flag.Parse()
+	conf := config.NewConfig(context.TODO())
 
-	pause := time.Duration(*pauseSec) * time.Second
-	url := fmt.Sprintf("http://%s:%v", *host, *port)
-	if *duration > 0 {
-		url = fmt.Sprintf("%s?duration=%v", url, *duration)
+	lockUrl := fmt.Sprintf("http://%s:%d", conf.LockHost, conf.LockPort)
+	if conf.LockDuration > 0 {
+		values := url.Values{}
+		values.Add("duration", strconv.FormatFloat(conf.LockDuration.Seconds(), 'f', 0, 64))
+		lockUrl = fmt.Sprintf("%s?%s", lockUrl, values.Encode())
 	}
-	log.Printf("Will try to acquire lock at '%s' each '%v' sec", url, *pauseSec)
+	log.Printf("Will try to acquire lock at '%s' each '%d' sec", lockUrl, conf.Period)
 
 	client := &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: maxIdleConnections,
 		},
-		Timeout: requestTimeout,
+		Timeout: conf.Timeout,
 	}
 	for {
-		if acquireLock(client, url) {
+		if acquireLock(client, lockUrl) {
 			return
 		}
-		time.Sleep(pause)
+		time.Sleep(conf.Period)
 	}
 }
 
 func acquireLock(client *http.Client, url string) bool {
+	//values := url.Values{}
+	//values.Add("duration", strconv.FormatFloat(conf.LockDuration.Seconds(), 'f', 0, 64))
+	//req, err := http.NewRequest("GET", url, strings.NewReader(q.Encode()))
+	//if err != nil {
+	//	return err
+	//}
+	//req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	//req.Close = true
+	//resp, err := http.DefaultClient.Do(req)
+	//if err != nil {
+	//	return err
+	//}
+
 	resp, err := client.Get(url)
 	if err != nil {
 		log.Printf("Error occurred: '%v'", err)

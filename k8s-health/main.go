@@ -38,6 +38,7 @@ This file incorporates work covered by the following copyright and permission no
 package main
 
 import (
+	"context"
 	"flakybit.net/psl/k8s-health/config"
 	"flakybit.net/psl/k8s-health/healthcheck"
 	"flakybit.net/psl/k8s-health/k8s"
@@ -45,12 +46,11 @@ import (
 )
 
 func main() {
-	conf := config.Parse()
-	conf.Validate()
+	conf := config.NewConfig(context.TODO())
 
 	k8sClient := k8s.NewClient(conf)
 	endpointChecker := healthcheck.NewHealthChecker(conf, k8sClient)
-	srv := service.NewService(conf.Host, conf.Port, endpointChecker.HealthFunction())
+	srv := service.NewService(conf.BindHost, conf.BindPort, endpointChecker.HealthFunction())
 
 	go srv.Run()
 	go endpointChecker.Run()

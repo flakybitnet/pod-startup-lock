@@ -37,47 +37,25 @@ This file incorporates work covered by the following copyright and permission no
 
 package util
 
-func ArrayContains(haystack []string, needle string) bool {
-	for _, key := range haystack {
-		if key == needle {
-			return true
-		}
-	}
-	return false
-}
-
-func MapContainsAllPairs(haystack map[string]string, needles []Pair) bool {
+func MapContainsAll(haystack, needles map[string]string) bool {
 	if len(needles) == 0 {
 		return false
 	}
-	for _, pair := range needles {
-		found, ok := haystack[pair.A]
-		if !ok || found != pair.B {
+	for nKey, nValue := range needles {
+		hsValue, exist := haystack[nKey]
+		if !exist || nValue != hsValue {
 			return false
 		}
 	}
 	return true
 }
 
-func MapContainsAnyPair(haystack map[string]string, needles []Pair) bool {
-	for _, pair := range needles {
-		found, ok := haystack[pair.A]
-		if ok && found == pair.B {
+func MapContainsAny(haystack, needles map[string]string) bool {
+	for nKey, nValue := range needles {
+		hsValue, exist := haystack[nKey]
+		if exist && nValue == hsValue {
 			return true
 		}
 	}
 	return false
-}
-
-func MapContainsAll(haystack map[string]string, needles map[string]string) bool {
-	if len(needles) == 0 {
-		return false
-	}
-	for key, val := range needles {
-		found, ok := haystack[key]
-		if !ok || found != val {
-			return false
-		}
-	}
-	return true
 }
