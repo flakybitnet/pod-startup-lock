@@ -35,64 +35,38 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package service
+package web
 
 import (
+	"flakybit.net/psl/k8s-health/service"
 	"fmt"
-	"log"
+	log "log/slog"
 	"net/http"
-	"time"
 )
 
-const readTimeout = 2 * time.Second
-const writeTimeout = 5 * time.Second
-const idleTimeout = 10 * time.Second
-
-type Service struct {
-	host       string
-	port       int
-	healthFunc func() bool
+type Controller struct {
+	healthChecker service.HealthSupplier
 }
 
-func NewService(host string, port int, healthFunc func() bool) Service {
-	return Service{host, port, healthFunc}
+//	func NewController(healthChecker service.HealthSupplier) http.Handler {
+//		return &Controller{healthChecker}
+//	}
+func NewController(healthChecker service.HealthSupplier) *Controller {
+	return &Controller{healthChecker}
 }
 
-func (s *Service) Run() {
-	log.Print("Starting Http Service...")
-	addr := fmt.Sprintf("%s:%v", s.host, s.port)
-	srv := &http.Server{
-		Addr:         addr,
-		Handler:      s,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  idleTimeout,
-	}
-
-	err := srv.ListenAndServe()
-	if err != nil {
-		log.Panic("Http Service failed to start: ", err)
-	}
-}
-
-func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if s.healthFunc() {
-		respondOk(w, r)
-	} else {
-		respondLocked(w, r)
-	}
-}
-
-func respondOk(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
-	log.Printf("Responding to '%v': %v", r.RemoteAddr, status)
-	w.WriteHeader(status)
-	w.Write([]byte("HealthCheck OK"))
-}
+	message := "Healthy"
+	if !c.healthChecker.IsHealthy() {
+		status = http.StatusPreconditionFailed
+		message = "Unhealthy"
+	}
 
-func respondLocked(w http.ResponseWriter, r *http.Request) {
-	status := http.StatusPreconditionFailed
-	log.Printf("Responding to '%v': %v", r.RemoteAddr, status)
+	log.Debug("responding to health request", log.String("clientIp", r.RemoteAddr), log.Int("status", status))
 	w.WriteHeader(status)
-	w.Write([]byte("HealthCheck Failed"))
+	_, err := fmt.Fprint(w, message)
+	if err != nil {
+		log.Error("failed to respond to health check request", r.RemoteAddr, status)
+	}
 }

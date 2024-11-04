@@ -36,32 +36,8 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package main
+package service
 
-import (
-	"context"
-	"flakybit.net/psl/lock/config"
-	"flakybit.net/psl/lock/service"
-	"flakybit.net/psl/lock/state"
-)
-
-func main() {
-	conf := config.NewConfig(context.TODO())
-	var endpoints []config.Endpoint
-	for _, url := range conf.HealthCheck.Endpoints {
-		endpoints = append(endpoints, config.ParseEndpoint(url))
-	}
-
-	endpointChecker := service.NewEndpointChecker(endpoints, conf.HealthCheck.PeriodOnPass, conf.HealthCheck.PeriodOnFail)
-
-	healthFunc := endpointChecker.HealthFunction()
-	lock := state.NewLock(conf.ParallelLocks)
-	handler := service.NewLockHandler(&lock, conf.LockDuration, healthFunc)
-
-	go service.Run(conf.BindHost, conf.BindPort, handler)
-	if conf.HealthCheck.Enabled {
-		go endpointChecker.Run()
-	}
-
-	select {} // Wait forever and let child goroutines run
+type HealthSupplier interface {
+	IsHealthy() bool
 }

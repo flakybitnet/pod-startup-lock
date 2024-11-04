@@ -36,7 +36,7 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package k8s
+package client
 
 import (
 	"context"
@@ -63,17 +63,17 @@ var defaultRetriable = func(error) bool {
 	return true
 }
 
-type Client struct {
+type K8sClient struct {
 	k8s kubernetes.Clientset
 }
 
-func NewClient(appConfig Config) *Client {
-	k8sConfig := getK8sConfig(appConfig)
+func NewK8sClient(conf Config) *K8sClient {
+	k8sConfig := getK8sConfig(conf)
 	k8sClient := *kubernetes.NewForConfigOrDie(k8sConfig)
-	return &Client{k8sClient}
+	return &K8sClient{k8sClient}
 }
 
-func (c *Client) GetNodeLabels(nodeName string) map[string]string {
+func (c *K8sClient) GetNodeLabels(nodeName string) map[string]string {
 	var node *core.Node
 	retryOnError(func() error {
 		var err error
@@ -83,7 +83,7 @@ func (c *Client) GetNodeLabels(nodeName string) map[string]string {
 	return node.Labels
 }
 
-func (c *Client) GetDaemonSets(namespace string) []apps.DaemonSet {
+func (c *K8sClient) GetDaemonSets(namespace string) []apps.DaemonSet {
 	var daemonSets *apps.DaemonSetList
 	retryOnError(func() error {
 		var err error
@@ -93,7 +93,7 @@ func (c *Client) GetDaemonSets(namespace string) []apps.DaemonSet {
 	return daemonSets.Items
 }
 
-func (c *Client) GetNodePods(nodeName string) []core.Pod {
+func (c *K8sClient) GetNodePods(nodeName string) []core.Pod {
 	opt := meta.ListOptions{}
 	opt.FieldSelector = "spec.nodeName=" + nodeName
 

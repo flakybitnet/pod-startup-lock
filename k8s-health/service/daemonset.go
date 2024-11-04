@@ -36,12 +36,12 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package healthcheck
+package service
 
 import (
 	"flakybit.net/psl/common/util"
+	"flakybit.net/psl/k8s-health/client"
 	"flakybit.net/psl/k8s-health/config"
-	"flakybit.net/psl/k8s-health/k8s"
 	"fmt"
 	"log"
 	"time"
@@ -50,52 +50,50 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-type HealthChecker struct {
-	k8s        *k8s.Client
+type DaemonSetChecker struct {
 	conf       config.Config
+	client     *client.K8sClient
 	nodeLabels map[string]string
-	isHealthy  bool
+	healthy    bool
 }
 
-func NewHealthChecker(appConfig config.Config, k8s *k8s.Client) *HealthChecker {
-	nodeLabels := k8s.GetNodeLabels(appConfig.NodeName)
-	return &HealthChecker{k8s, appConfig, nodeLabels, false}
+func NewDaemonSetChecker(conf config.Config, client *client.K8sClient) *DaemonSetChecker {
+	nodeLabels := client.GetNodeLabels(conf.NodeName)
+	return &DaemonSetChecker{conf, client, nodeLabels, false}
 }
 
-func (h *HealthChecker) HealthFunction() func() bool {
-	return func() bool {
-		return h.isHealthy
-	}
+func (dsc *DaemonSetChecker) IsHealthy() bool {
+	return dsc.healthy
 }
 
-func (h *HealthChecker) Run() {
+func (dsc *DaemonSetChecker) Run() {
 	for {
-		if h.check() {
+		if dsc.check() {
 			log.Print("HealthCheck passed")
-			h.isHealthy = true
-			time.Sleep(h.conf.DaemonSetHC.PeriodOnPass)
+			dsc.healthy = true
+			time.Sleep(dsc.conf.DaemonSetHC.PeriodOnPass)
 		} else {
 			log.Print("HealthCheck failed")
-			h.isHealthy = false
-			time.Sleep(h.conf.DaemonSetHC.PeriodOnPass)
+			dsc.healthy = false
+			time.Sleep(dsc.conf.DaemonSetHC.PeriodOnPass)
 		}
 	}
 }
 
-func (h *HealthChecker) check() bool {
+func (dsc *DaemonSetChecker) check() bool {
 	log.Print("---")
 	log.Print("HealthCheck:")
-	daemonSets := h.k8s.GetDaemonSets(h.conf.DaemonSetHC.Namespace)
-	if h.checkAllDaemonSetsReady(daemonSets) {
+	daemonSets := dsc.client.GetDaemonSets(dsc.conf.DaemonSetHC.Namespace)
+	if dsc.checkAllDaemonSetsReady(daemonSets) {
 		return true
 	}
-	nodePods := h.k8s.GetNodePods(h.conf.NodeName)
-	return h.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
+	nodePods := dsc.client.GetNodePods(dsc.conf.NodeName)
+	return dsc.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
-func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {
+func (dsc *DaemonSetChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {
 	for _, ds := range daemonSets {
-		if required, reason := h.checkRequired(&ds); !required {
+		if required, reason := dsc.checkRequired(&ds); !required {
 			log.Print(reason)
 			continue
 		}
@@ -111,9 +109,9 @@ func (h *HealthChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) b
 	return true
 }
 
-func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV1.DaemonSet, pods []v1.Pod) bool {
+func (dsc *DaemonSetChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV1.DaemonSet, pods []v1.Pod) bool {
 	for _, ds := range daemonSets {
-		if required, reason := h.checkRequired(&ds); !required {
+		if required, reason := dsc.checkRequired(&ds); !required {
 			log.Print(reason)
 			continue
 		}
@@ -132,19 +130,19 @@ func (h *HealthChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV
 	return true
 }
 
-func (h *HealthChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) {
+func (dsc *DaemonSetChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) {
 	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
-	if len(h.conf.DaemonSetHC.Exclude) > 0 && util.MapContainsAny(ds.Labels, h.conf.DaemonSetHC.Exclude) {
+	if len(dsc.conf.DaemonSetHC.Exclude) > 0 && util.MapContainsAny(ds.Labels, dsc.conf.DaemonSetHC.Exclude) {
 		return false, reason + "matches exclude labels"
 	}
-	if len(h.conf.DaemonSetHC.Include) > 0 && !util.MapContainsAll(ds.Labels, h.conf.DaemonSetHC.Include) {
+	if len(dsc.conf.DaemonSetHC.Include) > 0 && !util.MapContainsAll(ds.Labels, dsc.conf.DaemonSetHC.Include) {
 		return false, reason + "not matches include labels"
 	}
-	if h.conf.DaemonSetHC.HostNetwork && !ds.Spec.Template.Spec.HostNetwork {
+	if dsc.conf.DaemonSetHC.HostNetwork && !ds.Spec.Template.Spec.HostNetwork {
 		return false, reason + "not on host network"
 	}
 	nodeSelector := ds.Spec.Template.Spec.NodeSelector
-	if !util.MapContainsAll(h.nodeLabels, nodeSelector) {
+	if !util.MapContainsAll(dsc.nodeLabels, nodeSelector) {
 		return false, reason + "not eligible for scheduling on node"
 	}
 	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)

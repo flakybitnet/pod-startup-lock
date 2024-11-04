@@ -15,7 +15,6 @@ If not, see <https://www.gnu.org/licenses/>.
 
 This file incorporates work covered by the following copyright and permission notice:
 	Copyright (c) 2018, Oath Inc.
-	Copyright (c) 2022, The PSL (Pod Startup Lock) Authors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -36,32 +35,27 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package main
+package web
 
 import (
-	"context"
-	"flakybit.net/psl/lock/config"
-	"flakybit.net/psl/lock/service"
-	"flakybit.net/psl/lock/state"
+	"flakybit.net/psl/k8s-health/config"
+	"fmt"
+	"net/http"
+	"time"
 )
 
-func main() {
-	conf := config.NewConfig(context.TODO())
-	var endpoints []config.Endpoint
-	for _, url := range conf.HealthCheck.Endpoints {
-		endpoints = append(endpoints, config.ParseEndpoint(url))
+const (
+	readTimeout  = 2 * time.Second
+	writeTimeout = 5 * time.Second
+	idleTimeout  = 10 * time.Second
+)
+
+func NewHttpServer(conf config.Config, controller http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", conf.BindHost, conf.BindPort),
+		Handler:      controller,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
 	}
-
-	endpointChecker := service.NewEndpointChecker(endpoints, conf.HealthCheck.PeriodOnPass, conf.HealthCheck.PeriodOnFail)
-
-	healthFunc := endpointChecker.HealthFunction()
-	lock := state.NewLock(conf.ParallelLocks)
-	handler := service.NewLockHandler(&lock, conf.LockDuration, healthFunc)
-
-	go service.Run(conf.BindHost, conf.BindPort, handler)
-	if conf.HealthCheck.Enabled {
-		go endpointChecker.Run()
-	}
-
-	select {} // Wait forever and let child goroutines run
 }

@@ -39,21 +39,31 @@ package main
 
 import (
 	"context"
+	"flakybit.net/psl/k8s-health/client"
 	"flakybit.net/psl/k8s-health/config"
-	"flakybit.net/psl/k8s-health/healthcheck"
-	"flakybit.net/psl/k8s-health/k8s"
 	"flakybit.net/psl/k8s-health/service"
+	"flakybit.net/psl/k8s-health/web"
+	log "log/slog"
 )
 
 func main() {
-	conf := config.NewConfig(context.TODO())
+	ctx := context.Background()
+	conf := config.NewConfig(ctx)
 
-	k8sClient := k8s.NewClient(conf)
-	endpointChecker := healthcheck.NewHealthChecker(conf, k8sClient)
-	srv := service.NewService(conf.BindHost, conf.BindPort, endpointChecker.HealthFunction())
+	k8sClient := client.NewK8sClient(conf)
+	daemonSetChecker := service.NewDaemonSetChecker(conf, k8sClient)
 
-	go srv.Run()
-	go endpointChecker.Run()
+	controller := web.NewController(daemonSetChecker)
+	httpServer := web.NewHttpServer(conf, controller)
+	err := httpServer.ListenAndServe()
+	if err != nil {
+		log.Error("http server failed to start", err)
+		panic(err)
+	}
+
+	if conf.DaemonSetHC.Enabled {
+		go daemonSetChecker.Run()
+	}
 
 	select {} // Wait forever and let child goroutines run
 }
