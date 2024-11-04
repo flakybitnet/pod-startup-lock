@@ -51,18 +51,14 @@ func main() {
 	conf := config.NewConfig(ctx)
 
 	k8sClient := client.NewK8sClient(conf)
-	daemonSetChecker := service.NewDaemonSetChecker(conf, k8sClient)
+	healthCheckService := service.NewHealthCheckService(conf, k8sClient)
 
-	controller := web.NewController(daemonSetChecker)
+	controller := web.NewController(healthCheckService)
 	httpServer := web.NewHttpServer(conf, controller)
 	err := httpServer.ListenAndServe()
 	if err != nil {
 		log.Error("http server failed to start", err)
 		panic(err)
-	}
-
-	if conf.DaemonSetHC.Enabled {
-		go daemonSetChecker.Run()
 	}
 
 	select {} // Wait forever and let child goroutines run

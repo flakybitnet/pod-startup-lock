@@ -30,6 +30,7 @@ type Config struct {
 	NodeName    string                     `env:"PSL_NODE_NAME, required"`     // K8s node name which the current app instance runs on
 	K8sApiUrl   string                     `env:"PSL_K8S_API_URL"`             // K8s API URL, for out-of-cluster usage only
 	DaemonSetHC DaemonSetHealthCheckConfig `env:", prefix=PSL_HC_DAEMONSET_"`
+	NodeLoadHC  NodeLoadHealthCheckConfig  `env:", prefix=PSL_HC_NODELOAD_"`
 }
 
 type DaemonSetHealthCheckConfig struct {
@@ -42,11 +43,17 @@ type DaemonSetHealthCheckConfig struct {
 	PeriodOnPass time.Duration     `env:"PERIOD_PASS, default=60s"`    // Pause between DaemonSet health checks if previous succeeded
 }
 
+type NodeLoadHealthCheckConfig struct {
+	Enabled      bool          `env:"ENABLED, default=false"`
+	CpuThreshold int           `env:"CPU_THRESHOLD, default=80"`
+	Period       time.Duration `env:"PERIOD, default=10s"`
+}
+
 func NewConfig(ctx context.Context) Config {
 	var conf Config
 	err := envconfig.Process(ctx, &conf)
 	if err != nil {
-		log.Error("cannot not process configuration", err)
+		log.Error("cannot process configuration", err)
 		os.Exit(1)
 	}
 	valid := conf.validate()

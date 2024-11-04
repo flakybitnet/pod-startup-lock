@@ -45,13 +45,10 @@ import (
 )
 
 type Controller struct {
-	healthChecker service.HealthSupplier
+	healthChecker service.HealthChecker
 }
 
-//	func NewController(healthChecker service.HealthSupplier) http.Handler {
-//		return &Controller{healthChecker}
-//	}
-func NewController(healthChecker service.HealthSupplier) *Controller {
+func NewController(healthChecker service.HealthChecker) *Controller {
 	return &Controller{healthChecker}
 }
 

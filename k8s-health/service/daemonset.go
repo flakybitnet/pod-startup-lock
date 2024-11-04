@@ -46,8 +46,8 @@ import (
 	"log"
 	"time"
 
-	AppsV1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 )
 
 type DaemonSetChecker struct {
@@ -57,9 +57,8 @@ type DaemonSetChecker struct {
 	healthy    bool
 }
 
-func NewDaemonSetChecker(conf config.Config, client *client.K8sClient) *DaemonSetChecker {
-	nodeLabels := client.GetNodeLabels(conf.NodeName)
-	return &DaemonSetChecker{conf, client, nodeLabels, false}
+func NewDaemonSetChecker(conf config.Config, client *client.K8sClient, node *core.Node) *DaemonSetChecker {
+	return &DaemonSetChecker{conf, client, node.Labels, false}
 }
 
 func (dsc *DaemonSetChecker) IsHealthy() bool {
@@ -91,7 +90,7 @@ func (dsc *DaemonSetChecker) check() bool {
 	return dsc.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
-func (dsc *DaemonSetChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonSet) bool {
+func (dsc *DaemonSetChecker) checkAllDaemonSetsReady(daemonSets []apps.DaemonSet) bool {
 	for _, ds := range daemonSets {
 		if required, reason := dsc.checkRequired(&ds); !required {
 			log.Print(reason)
@@ -109,7 +108,7 @@ func (dsc *DaemonSetChecker) checkAllDaemonSetsReady(daemonSets []AppsV1.DaemonS
 	return true
 }
 
-func (dsc *DaemonSetChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []AppsV1.DaemonSet, pods []v1.Pod) bool {
+func (dsc *DaemonSetChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []apps.DaemonSet, pods []core.Pod) bool {
 	for _, ds := range daemonSets {
 		if required, reason := dsc.checkRequired(&ds); !required {
 			log.Print(reason)
@@ -130,7 +129,7 @@ func (dsc *DaemonSetChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []
 	return true
 }
 
-func (dsc *DaemonSetChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) {
+func (dsc *DaemonSetChecker) checkRequired(ds *apps.DaemonSet) (bool, string) {
 	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
 	if len(dsc.conf.DaemonSetHC.Exclude) > 0 && util.MapContainsAny(ds.Labels, dsc.conf.DaemonSetHC.Exclude) {
 		return false, reason + "matches exclude labels"
@@ -148,7 +147,7 @@ func (dsc *DaemonSetChecker) checkRequired(ds *AppsV1.DaemonSet) (bool, string) 
 	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)
 }
 
-func findDaemonSetPod(ds *AppsV1.DaemonSet, pods []v1.Pod) (*v1.Pod, bool) {
+func findDaemonSetPod(ds *apps.DaemonSet, pods []core.Pod) (*core.Pod, bool) {
 	for _, pod := range pods {
 		if isPodOwnedByDs(&pod, ds) {
 			return &pod, true
@@ -157,7 +156,7 @@ func findDaemonSetPod(ds *AppsV1.DaemonSet, pods []v1.Pod) (*v1.Pod, bool) {
 	return nil, false
 }
 
-func isPodReady(pod *v1.Pod) bool {
+func isPodReady(pod *core.Pod) bool {
 	if pod.Status.Phase != "Running" {
 		log.Printf("'%v' Pod: Not running: Phase: '%v'", pod.Name, pod.Status.Phase)
 		return false
@@ -172,7 +171,7 @@ func isPodReady(pod *v1.Pod) bool {
 	return false
 }
 
-func isPodOwnedByDs(pod *v1.Pod, ds *AppsV1.DaemonSet) bool {
+func isPodOwnedByDs(pod *core.Pod, ds *apps.DaemonSet) bool {
 	for _, ref := range pod.ObjectMeta.OwnerReferences {
 		if ds.ObjectMeta.UID == ref.UID {
 			return true

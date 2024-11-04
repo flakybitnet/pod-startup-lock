@@ -48,6 +48,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	metrics "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 	"log"
 	"time"
 )
@@ -64,23 +66,35 @@ var defaultRetriable = func(error) bool {
 }
 
 type K8sClient struct {
-	k8s kubernetes.Clientset
+	k8s     kubernetes.Clientset
+	metrics metricsv.Clientset
 }
 
 func NewK8sClient(conf Config) *K8sClient {
 	k8sConfig := getK8sConfig(conf)
 	k8sClient := *kubernetes.NewForConfigOrDie(k8sConfig)
-	return &K8sClient{k8sClient}
+	metricsClient := *metricsv.NewForConfigOrDie(k8sConfig)
+	return &K8sClient{k8sClient, metricsClient}
 }
 
-func (c *K8sClient) GetNodeLabels(nodeName string) map[string]string {
+func (c *K8sClient) GetNodeInfo(nodeName string) *core.Node {
 	var node *core.Node
 	retryOnError(func() error {
 		var err error
 		node, err = c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
 		return err
 	})
-	return node.Labels
+	return node
+}
+
+func (c *K8sClient) GetNodeMetrics(nodeName string) *metrics.NodeMetrics {
+	var nodeMetrics *metrics.NodeMetrics
+	retryOnError(func() error {
+		var err error
+		nodeMetrics, err = c.metrics.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, meta.GetOptions{})
+		return err
+	})
+	return nodeMetrics
 }
 
 func (c *K8sClient) GetDaemonSets(namespace string) []apps.DaemonSet {
