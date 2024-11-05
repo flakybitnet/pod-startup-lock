@@ -21,12 +21,19 @@ import (
 	. "flakybit.net/psl/init/client"
 	. "flakybit.net/psl/init/config"
 	. "flakybit.net/psl/init/service"
+	slogenv "github.com/cbrewster/slog-env"
 	log "log/slog"
+	"os"
 )
 
 func main() {
 	var err error
 	ctx := context.Background()
+
+	logHandler := slogenv.NewHandler(
+		log.NewTextHandler(os.Stderr, nil),
+		slogenv.WithEnvVarName("PSL_LOG"))
+	log.SetDefault(log.New(logHandler))
 
 	conf, err := NewConfig(ctx)
 	if err != nil {

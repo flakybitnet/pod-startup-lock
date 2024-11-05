@@ -44,12 +44,19 @@ import (
 	. "flakybit.net/psl/lock/config"
 	. "flakybit.net/psl/lock/service"
 	. "flakybit.net/psl/lock/web"
+	slogenv "github.com/cbrewster/slog-env"
 	log "log/slog"
+	"os"
 )
 
 func main() {
 	var err error
 	ctx := context.Background()
+
+	logHandler := slogenv.NewHandler(
+		log.NewTextHandler(os.Stderr, nil),
+		slogenv.WithEnvVarName("PSL_LOG"))
+	log.SetDefault(log.New(logHandler))
 
 	conf, err := NewConfig(ctx)
 	if err != nil {
@@ -60,13 +67,6 @@ func main() {
 	healthClient := NewHealthClient(conf)
 	healthService := NewHealthCheckService(conf, healthClient)
 	go healthService.Run(ctx)
-
-	//healthFunc := endpointChecker.HealthFunction()
-	//lock := NewLockService(conf.ParallelLocks)
-	//handler := NewLockHandler(&lock, conf.LockDuration, healthFunc)
-	//if conf.HealthCheck.Enabled {
-	//	go endpointChecker.Run()
-	//}
 
 	lockService := NewLockService(conf)
 	controller := NewController(conf, healthService, lockService)
