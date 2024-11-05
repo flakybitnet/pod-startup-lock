@@ -107,7 +107,7 @@ func (dsc *DaemonSetChecker) check(ctx context.Context) bool {
 }
 
 func (dsc *DaemonSetChecker) getRequiredDaemonSets(daemonSets []apps.DaemonSet) []apps.DaemonSet {
-	requiredDaemonSets := make([]apps.DaemonSet, len(daemonSets))
+	var requiredDaemonSets []apps.DaemonSet
 	for _, ds := range daemonSets {
 		required, reason := dsc.checkRequired(&ds)
 		if required {
@@ -131,7 +131,7 @@ func (dsc *DaemonSetChecker) checkRequired(ds *apps.DaemonSet) (bool, string) {
 		return false, reason + "not on host network"
 	}
 	nodeSelector := ds.Spec.Template.Spec.NodeSelector
-	if !MapContainsAll(dsc.nodeLabels, nodeSelector) {
+	if len(nodeSelector) > 0 && !MapContainsAll(dsc.nodeLabels, nodeSelector) {
 		return false, reason + "not eligible for scheduling on node"
 	}
 	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)
