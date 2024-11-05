@@ -15,7 +15,6 @@ If not, see <https://www.gnu.org/licenses/>.
 
 This file incorporates work covered by the following copyright and permission notice:
 	Copyright (c) 2018, Oath Inc.
-	Copyright (c) 2022, The PSL (Pod Startup LockService) Authors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -36,46 +35,91 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package main
+package service
 
 import (
 	"context"
 	. "flakybit.net/psl/lock/client"
 	. "flakybit.net/psl/lock/config"
-	. "flakybit.net/psl/lock/service"
-	. "flakybit.net/psl/lock/web"
 	log "log/slog"
+	"time"
 )
 
-func main() {
-	var err error
-	ctx := context.Background()
+type HealthCheckService struct {
+	conf      Config
+	client    *HealthClient
+	endpoints []Endpoint
+	healthy   bool
+}
 
-	conf, err := NewConfig(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", log.Any("error", err))
-		panic(err)
+func NewHealthCheckService(conf Config, client *HealthClient) *HealthCheckService {
+	var endpoints []Endpoint
+	for _, url := range conf.HealthCheck.Endpoints {
+		endpoints = append(endpoints, ParseEndpoint(url))
 	}
-
-	healthClient := NewHealthClient(conf)
-	healthService := NewHealthCheckService(conf, healthClient)
-	go healthService.Run(ctx)
-
-	//healthFunc := endpointChecker.HealthFunction()
-	//lock := NewLockService(conf.ParallelLocks)
-	//handler := NewLockHandler(&lock, conf.LockDuration, healthFunc)
-	//if conf.HealthCheck.Enabled {
-	//	go endpointChecker.Run()
-	//}
-
-	lockService := NewLockService(conf)
-	controller := NewController(conf, healthService, lockService)
-	httpServer := NewHttpServer(conf, controller)
-	err = httpServer.ListenAndServe()
-	if err != nil {
-		log.ErrorContext(ctx, "failed to start http server", log.Any("error", err))
-		panic(err)
+	checker := &HealthCheckService{
+		conf,
+		client,
+		endpoints,
+		false,
 	}
+	log.Info("configured health check service")
+	return checker
+}
 
-	select {} // Wait forever and let child goroutines run
+func (hcs *HealthCheckService) IsHealthy() bool {
+	if !hcs.conf.HealthCheck.Enabled {
+		return true
+	}
+	return hcs.healthy
+}
+
+func (hcs *HealthCheckService) Run(ctx context.Context) {
+	ticker := time.NewTicker(hcs.conf.HealthCheck.PeriodOnFail)
+	defer ticker.Stop()
+
+	for {
+		checkStatus := hcs.checkAll(ctx, hcs.endpoints)
+		if checkStatus != hcs.healthy {
+			if checkStatus {
+				ticker.Reset(hcs.conf.HealthCheck.PeriodOnPass)
+			} else {
+				ticker.Reset(hcs.conf.HealthCheck.PeriodOnFail)
+			}
+		}
+		log.Debug("performed health checks", log.Bool("healthy", checkStatus))
+		hcs.healthy = checkStatus
+
+		select {
+		case <-ticker.C:
+			continue
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (hcs *HealthCheckService) checkAll(ctx context.Context, endpoints []Endpoint) bool {
+	for _, endpoint := range endpoints {
+		if !hcs.check(ctx, endpoint) {
+			return false
+		}
+	}
+	return true
+}
+
+func (hcs *HealthCheckService) check(ctx context.Context, endpoint Endpoint) bool {
+	if endpoint.IsHttp() {
+		healthy, err := hcs.client.CheckHttp(ctx, endpoint.(HttpEndpoint).Url())
+		if err != nil {
+			log.ErrorContext(ctx, "failed to check endpoint", log.Any("error", err))
+		}
+		return healthy
+	} else {
+		healthy, err := hcs.client.CheckRaw(ctx, endpoint.Protocol(), endpoint.(RawEndpoint).Address())
+		if err != nil {
+			log.ErrorContext(ctx, "failed to check endpoint", log.Any("error", err))
+		}
+		return healthy
+	}
 }

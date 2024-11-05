@@ -14,27 +14,49 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see <https://www.gnu.org/licenses/>.
 */
 
-package main
+package service
 
 import (
 	"context"
 	. "flakybit.net/psl/init/client"
 	. "flakybit.net/psl/init/config"
-	. "flakybit.net/psl/init/service"
 	log "log/slog"
+	"time"
 )
 
-func main() {
-	var err error
-	ctx := context.Background()
+type LockService struct {
+	conf   Config
+	client *LockClient
+}
 
-	conf, err := NewConfig(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", err)
-		panic(err)
+func NewLockService(conf Config, client *LockClient) *LockService {
+	hcSvc := LockService{
+		conf,
+		client,
 	}
+	log.Info("configured lock service")
+	return &hcSvc
+}
 
-	lockClient := NewLockClient(conf)
-	lockService := NewLockService(conf, lockClient)
-	lockService.Run(ctx)
+func (ls *LockService) Run(ctx context.Context) {
+	ticker := time.NewTicker(ls.conf.Period)
+	defer ticker.Stop()
+
+	for {
+		success, err := ls.client.AcquireLock(ctx)
+		if err != nil {
+			log.ErrorContext(ctx, "failed to acquire a lock", log.Any("error", err))
+		}
+		if success {
+			log.Info("lock acquired successfully")
+			return
+		}
+
+		select {
+		case <-ticker.C:
+			continue
+		case <-ctx.Done():
+			return
+		}
+	}
 }

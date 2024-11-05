@@ -14,27 +14,13 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see <https://www.gnu.org/licenses/>.
 */
 
-package main
+package service
 
 import (
 	"context"
-	. "flakybit.net/psl/init/client"
-	. "flakybit.net/psl/init/config"
-	. "flakybit.net/psl/init/service"
-	log "log/slog"
 )
 
-func main() {
-	var err error
-	ctx := context.Background()
-
-	conf, err := NewConfig(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", err)
-		panic(err)
-	}
-
-	lockClient := NewLockClient(conf)
-	lockService := NewLockService(conf, lockClient)
-	lockService.Run(ctx)
+type HealthChecker interface {
+	Run(ctx context.Context)
+	IsHealthy() bool
 }

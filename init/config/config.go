@@ -18,9 +18,9 @@ package config
 
 import (
 	"context"
+	"errors"
 	"github.com/sethvargo/go-envconfig"
 	log "log/slog"
-	"os"
 	"time"
 )
 
@@ -32,30 +32,28 @@ type Config struct {
 	Timeout      time.Duration `env:"PSL_LOCK_CHECK_TIMEOUT, default=1s"` // Timeout of lock request
 }
 
-func NewConfig(ctx context.Context) Config {
+func NewConfig(ctx context.Context) (Config, error) {
 	var conf Config
 	err := envconfig.Process(ctx, &conf)
 	if err != nil {
-		log.Error("cannot not process configuration", err)
-		os.Exit(1)
+		return conf, err
 	}
-	valid := conf.validate()
-	if !valid {
-		os.Exit(1)
+	err = conf.validate()
+	if err != nil {
+		return conf, err
 	}
 	log.Info("application configured", log.Any("config", conf))
-	return conf
+	return conf, err
 }
 
-func (c *Config) validate() bool {
-	valid := true
+func (c *Config) validate() error {
+	var periodError error
 	if c.Period < 0 {
-		log.Error("lock check period is lesser than 0")
-		valid = false
+		periodError = errors.New("lock check period is lesser than 0")
 	}
-	if c.Timeout < 0 {
-		log.Error("check timeout is lesser than 0")
-		valid = false
+	var timeoutError error
+	if c.Period < 0 {
+		timeoutError = errors.New("check timeout is lesser than 0")
 	}
-	return valid
+	return errors.Join(periodError, timeoutError)
 }

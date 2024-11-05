@@ -35,32 +35,76 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package service
+package web
 
 import (
+	. "flakybit.net/psl/common"
+	. "flakybit.net/psl/lock/config"
+	. "flakybit.net/psl/lock/service"
 	"fmt"
-	"log"
+	log "log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
-const readTimeout = 2 * time.Second
-const writeTimeout = 2 * time.Second
-const idleTimeout = 10 * time.Second
+type Controller struct {
+	conf          Config
+	healthChecker HealthChecker
+	lockService   *LockService
+}
 
-func Run(host string, port int, handler http.Handler) {
-	log.Print("Starting Http Service...")
-	addr := fmt.Sprintf("%s:%v", host, port)
+func NewController(conf Config, healthChecker HealthChecker, lockService *LockService) *Controller {
+	controller := &Controller{conf, healthChecker, lockService}
+	log.Info("configured web controller")
+	return controller
+}
 
-	srv := &http.Server{
-		Addr:         addr,
-		Handler:      handler,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  idleTimeout,
+func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	status := http.StatusOK
+	message := "Lock acquired"
+
+	if c.healthChecker.IsHealthy() {
+		duration := c.getRequestedDuration(r.URL.Query())
+		if duration == 0 {
+			duration = c.conf.LockDuration
+		}
+		acquired := c.lockService.Acquire(duration)
+		if !acquired {
+			status = http.StatusLocked
+			message = "Locked"
+		}
+	} else {
+		status = http.StatusLocked
+		message = "Locked"
 	}
-	err := srv.ListenAndServe()
+
+	log.Info("responding to health request",
+		log.String("client-ip", r.RemoteAddr),
+		log.Int("status", status))
+
+	w.WriteHeader(status)
+	_, err := fmt.Fprint(w, message)
 	if err != nil {
-		log.Panic("Http Service failed to start: ", err)
+		log.Error("failed to respond to health check request",
+			log.String("client-ip", r.RemoteAddr),
+			log.Int("status", status),
+			log.Any("error", err))
 	}
+}
+
+func (c *Controller) getRequestedDuration(values url.Values) time.Duration {
+	durationStr := values.Get("duration")
+	if durationStr == "" {
+		return 0
+	}
+	duration, err := strconv.Atoi(durationStr)
+	if err != nil {
+		log.Error("invalid requested duration",
+			log.String("duration", durationStr),
+			log.Any("error", err))
+		return 0
+	}
+	return time.Duration(duration) * time.Second
 }

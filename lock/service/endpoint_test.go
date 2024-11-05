@@ -1,8 +1,8 @@
 /*
-This file is part of PSL (Pod Startup Lock).
-Copyright (c) 2024, The PSL (Pod Startup Lock) Authors
+This file is part of PSL (Pod Startup LockService).
+Copyright (c) 2024, The PSL (Pod Startup LockService) Authors
 
-PSL (Pod Startup Lock) is free software:
+PSL (Pod Startup LockService) is free software:
 you can redistribute it and/or modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation, version 3 of the License.
 
@@ -35,7 +35,7 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package config
+package service
 
 import (
 	"github.com/stretchr/testify/require"

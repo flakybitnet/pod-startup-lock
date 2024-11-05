@@ -38,18 +38,20 @@ This file incorporates work covered by the following copyright and permission no
 package web
 
 import (
-	"flakybit.net/psl/k8s-health/service"
+	. "flakybit.net/psl/common"
 	"fmt"
 	log "log/slog"
 	"net/http"
 )
 
 type Controller struct {
-	healthChecker service.HealthChecker
+	healthChecker HealthChecker
 }
 
-func NewController(healthChecker service.HealthChecker) *Controller {
-	return &Controller{healthChecker}
+func NewController(healthChecker HealthChecker) *Controller {
+	controller := &Controller{healthChecker}
+	log.Info("configured web controller")
+	return controller
 }
 
 func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,10 +62,16 @@ func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		message = "Unhealthy"
 	}
 
-	log.Debug("responding to health request", log.String("clientIp", r.RemoteAddr), log.Int("status", status))
+	log.Info("responding to health request",
+		log.String("client-ip", r.RemoteAddr),
+		log.Int("status", status))
+
 	w.WriteHeader(status)
 	_, err := fmt.Fprint(w, message)
 	if err != nil {
-		log.Error("failed to respond to health check request", r.RemoteAddr, status)
+		log.Error("failed to respond to health check request",
+			log.String("client-ip", r.RemoteAddr),
+			log.Int("status", status),
+			log.Any("error", err))
 	}
 }

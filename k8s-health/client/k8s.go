@@ -50,7 +50,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	metrics "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
-	"log"
+	log "log/slog"
 	"time"
 )
 
@@ -74,47 +74,49 @@ func NewK8sClient(conf Config) *K8sClient {
 	k8sConfig := getK8sConfig(conf)
 	k8sClient := *kubernetes.NewForConfigOrDie(k8sConfig)
 	metricsClient := *metricsv.NewForConfigOrDie(k8sConfig)
-	return &K8sClient{k8sClient, metricsClient}
+	client := &K8sClient{k8sClient, metricsClient}
+	log.Info("configured K8s client")
+	return client
 }
 
-func (c *K8sClient) GetNodeInfo(nodeName string) *core.Node {
+func (c *K8sClient) GetNodeInfo(ctx context.Context, nodeName string) *core.Node {
 	var node *core.Node
 	retryOnError(func() error {
 		var err error
-		node, err = c.k8s.CoreV1().Nodes().Get(context.TODO(), nodeName, meta.GetOptions{})
+		node, err = c.k8s.CoreV1().Nodes().Get(ctx, nodeName, meta.GetOptions{})
 		return err
 	})
 	return node
 }
 
-func (c *K8sClient) GetNodeMetrics(nodeName string) *metrics.NodeMetrics {
+func (c *K8sClient) GetNodeMetrics(ctx context.Context, nodeName string) *metrics.NodeMetrics {
 	var nodeMetrics *metrics.NodeMetrics
 	retryOnError(func() error {
 		var err error
-		nodeMetrics, err = c.metrics.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, meta.GetOptions{})
+		nodeMetrics, err = c.metrics.MetricsV1beta1().NodeMetricses().Get(ctx, nodeName, meta.GetOptions{})
 		return err
 	})
 	return nodeMetrics
 }
 
-func (c *K8sClient) GetDaemonSets(namespace string) []apps.DaemonSet {
+func (c *K8sClient) GetDaemonSets(ctx context.Context, namespace string) []apps.DaemonSet {
 	var daemonSets *apps.DaemonSetList
 	retryOnError(func() error {
 		var err error
-		daemonSets, err = c.k8s.AppsV1().DaemonSets(namespace).List(context.TODO(), meta.ListOptions{})
+		daemonSets, err = c.k8s.AppsV1().DaemonSets(namespace).List(ctx, meta.ListOptions{})
 		return err
 	})
 	return daemonSets.Items
 }
 
-func (c *K8sClient) GetNodePods(nodeName string) []core.Pod {
+func (c *K8sClient) GetNodePods(ctx context.Context, nodeName string) []core.Pod {
 	opt := meta.ListOptions{}
 	opt.FieldSelector = "spec.nodeName=" + nodeName
 
 	var pods *core.PodList
 	retryOnError(func() error {
 		var err error
-		pods, err = c.k8s.CoreV1().Pods("").List(context.TODO(), opt)
+		pods, err = c.k8s.CoreV1().Pods("").List(ctx, opt)
 		return err
 	})
 	return pods.Items
@@ -122,14 +124,14 @@ func (c *K8sClient) GetNodePods(nodeName string) []core.Pod {
 
 func getK8sConfig(appConfig Config) *rest.Config {
 	if appConfig.K8sApiUrl != "" {
-		log.Printf("K8s baseUrl overrided! Using out-of-cluster k8s client config")
+		log.Info("using out-of-cluster K8s client config", log.String("k8s-url", appConfig.K8sApiUrl))
 		config := rest.Config{}
 		config.Host = appConfig.K8sApiUrl
 		config.Insecure = true
 		return &config
 	}
 
-	log.Printf("Using in-cluster k8s client config")
+	log.Debug("using in-cluster K8s client config")
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err)

@@ -15,7 +15,6 @@ If not, see <https://www.gnu.org/licenses/>.
 
 This file incorporates work covered by the following copyright and permission notice:
 	Copyright (c) 2018, Oath Inc.
-	Copyright (c) 2022, The PSL (Pod Startup LockService) Authors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -36,46 +35,99 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package main
+package service
 
 import (
-	"context"
-	. "flakybit.net/psl/lock/client"
 	. "flakybit.net/psl/lock/config"
-	. "flakybit.net/psl/lock/service"
-	. "flakybit.net/psl/lock/web"
-	log "log/slog"
+	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
 )
 
-func main() {
-	var err error
-	ctx := context.Background()
+var duration = time.Duration(10) * time.Second
 
-	conf, err := NewConfig(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", log.Any("error", err))
-		panic(err)
-	}
+func TestAcquireSingleIfFirst(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 1})
 
-	healthClient := NewHealthClient(conf)
-	healthService := NewHealthCheckService(conf, healthClient)
-	go healthService.Run(ctx)
+	// WHEN
+	success := lock.Acquire(duration)
 
-	//healthFunc := endpointChecker.HealthFunction()
-	//lock := NewLockService(conf.ParallelLocks)
-	//handler := NewLockHandler(&lock, conf.LockDuration, healthFunc)
-	//if conf.HealthCheck.Enabled {
-	//	go endpointChecker.Run()
-	//}
+	// THEN
+	require.True(t, success)
+}
 
-	lockService := NewLockService(conf)
-	controller := NewController(conf, healthService, lockService)
-	httpServer := NewHttpServer(conf, controller)
-	err = httpServer.ListenAndServe()
-	if err != nil {
-		log.ErrorContext(ctx, "failed to start http server", log.Any("error", err))
-		panic(err)
-	}
+func TestAcquireSingleIfSecond(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 1})
+	lock.Acquire(duration)
 
-	select {} // Wait forever and let child goroutines run
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.False(t, success)
+}
+
+func TestAcquireSingleIfReleased(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 1})
+	lock.Acquire(0)
+	time.Sleep(1 * time.Millisecond)
+
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.True(t, success)
+}
+
+func TestAcquireMultipleIfFirst(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 2})
+
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.True(t, success)
+}
+
+func TestAcquireMultipleIfSecond(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 2})
+	lock.Acquire(duration)
+
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.True(t, success)
+}
+
+func TestAcquireMultipleIfExceed(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 2})
+	lock.Acquire(duration)
+	lock.Acquire(duration)
+
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.False(t, success)
+}
+
+func TestAcquireMultipleIfReleased(t *testing.T) {
+	// GIVEN
+	lock := NewLockService(Config{ParallelLocks: 2})
+	lock.Acquire(0)
+	time.Sleep(1 * time.Millisecond)
+	lock.Acquire(duration)
+
+	// WHEN
+	success := lock.Acquire(duration)
+
+	// THEN
+	require.True(t, success)
 }

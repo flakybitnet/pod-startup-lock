@@ -39,25 +39,33 @@ package main
 
 import (
 	"context"
-	"flakybit.net/psl/k8s-health/client"
-	"flakybit.net/psl/k8s-health/config"
-	"flakybit.net/psl/k8s-health/service"
-	"flakybit.net/psl/k8s-health/web"
+	. "flakybit.net/psl/k8s-health/client"
+	. "flakybit.net/psl/k8s-health/config"
+	. "flakybit.net/psl/k8s-health/service"
+	. "flakybit.net/psl/k8s-health/web"
 	log "log/slog"
 )
 
 func main() {
+	var err error
 	ctx := context.Background()
-	conf := config.NewConfig(ctx)
 
-	k8sClient := client.NewK8sClient(conf)
-	healthCheckService := service.NewHealthCheckService(conf, k8sClient)
-
-	controller := web.NewController(healthCheckService)
-	httpServer := web.NewHttpServer(conf, controller)
-	err := httpServer.ListenAndServe()
+	conf, err := NewConfig(ctx)
 	if err != nil {
-		log.Error("http server failed to start", err)
+		log.ErrorContext(ctx, "failed to configure application", log.Any("error", err))
+		panic(err)
+	}
+
+	k8sClient := NewK8sClient(conf)
+
+	healthCheckService := NewHealthCheckService(ctx, conf, k8sClient)
+	healthCheckService.Run(ctx)
+
+	controller := NewController(healthCheckService)
+	httpServer := NewHttpServer(conf, controller)
+	err = httpServer.ListenAndServe()
+	if err != nil {
+		log.ErrorContext(ctx, "failed to start http server", log.Any("error", err))
 		panic(err)
 	}
 

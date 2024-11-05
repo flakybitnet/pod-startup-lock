@@ -17,8 +17,9 @@ If not, see <https://www.gnu.org/licenses/>.
 package service
 
 import (
-	"flakybit.net/psl/k8s-health/client"
-	"flakybit.net/psl/k8s-health/config"
+	"context"
+	. "flakybit.net/psl/k8s-health/client"
+	. "flakybit.net/psl/k8s-health/config"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	log "log/slog"
@@ -30,37 +31,53 @@ import (
 // https://stackoverflow.com/questions/52029656/how-to-retrieve-kubernetes-metrics-via-client-go-and-golang
 
 type NodeLoadChecker struct {
-	conf            config.Config
-	client          *client.K8sClient
+	conf            Config
+	client          *K8sClient
 	nodeCpuCapacity *resource.Quantity
 	healthy         bool
 }
 
-func NewNodeLoadChecker(conf config.Config, client *client.K8sClient, node *core.Node) *NodeLoadChecker {
+func NewNodeLoadChecker(conf Config, client *K8sClient, node *core.Node) *NodeLoadChecker {
 	cpuCap := node.Status.Capacity.Cpu()
-	log.Info("configured node load checker", log.String("cpu-capacity", cpuCap.String()))
-	return &NodeLoadChecker{conf, client, cpuCap, false}
+	checker := &NodeLoadChecker{
+		conf,
+		client,
+		cpuCap,
+		false,
+	}
+	log.Info("configured node load checker",
+		log.String("cpu-capacity", cpuCap.String()),
+		log.Int("threshold", conf.NodeLoadHC.CpuThreshold))
+	return checker
 }
 
 func (nlc *NodeLoadChecker) IsHealthy() bool {
+	if !nlc.conf.NodeLoadHC.Enabled {
+		return true
+	}
 	return nlc.healthy
 }
 
-func (nlc *NodeLoadChecker) Run() {
+func (nlc *NodeLoadChecker) Run(ctx context.Context) {
+	ticker := time.NewTicker(nlc.conf.NodeLoadHC.Period)
+	defer ticker.Stop()
+
 	for {
-		if nlc.check() {
-			log.Debug("node load health check passed")
-			nlc.healthy = true
-		} else {
-			log.Debug("node load health check failed")
-			nlc.healthy = false
+		checkStatus := nlc.check(ctx)
+		log.Debug("performed node load health check", log.Bool("healthy", checkStatus))
+		nlc.healthy = checkStatus
+
+		select {
+		case <-ticker.C:
+			continue
+		case <-ctx.Done():
+			return
 		}
-		time.Sleep(nlc.conf.NodeLoadHC.Period)
 	}
 }
 
-func (nlc *NodeLoadChecker) check() bool {
-	metrics := nlc.client.GetNodeMetrics(nlc.conf.NodeName)
+func (nlc *NodeLoadChecker) check(ctx context.Context) bool {
+	metrics := nlc.client.GetNodeMetrics(ctx, nlc.conf.NodeName)
 	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
 	cpuUsageShare := float64(cpuUsageMilli) / float64(nlc.nodeCpuCapacity.MilliValue())
 	cpuUsagePct := int(math.Round(cpuUsageShare * 100))

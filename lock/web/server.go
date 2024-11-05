@@ -15,7 +15,6 @@ If not, see <https://www.gnu.org/licenses/>.
 
 This file incorporates work covered by the following copyright and permission notice:
 	Copyright (c) 2018, Oath Inc.
-	Copyright (c) 2022, The PSL (Pod Startup Lock) Authors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -36,67 +35,28 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package service
+package web
 
 import (
-	"flakybit.net/psl/lock/state"
-	"log"
+	. "flakybit.net/psl/lock/config"
+	"fmt"
+	log "log/slog"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 )
 
-type lockHandler struct {
-	lock            *state.Lock
-	defaultTimeout  time.Duration
-	permitAcquiring func() bool
-}
+const readTimeout = 2 * time.Second
+const writeTimeout = 2 * time.Second
+const idleTimeout = 10 * time.Second
 
-func NewLockHandler(lock *state.Lock, defaultTimeout time.Duration, permitOperationChecker func() bool) http.Handler {
-	return &lockHandler{lock, defaultTimeout, permitOperationChecker}
-}
-
-func (h *lockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !h.permitAcquiring() {
-		respondLocked(w, r)
-		return
+func NewHttpServer(conf Config, controller http.Handler) *http.Server {
+	server := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", conf.BindHost, conf.BindPort),
+		Handler:      controller,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
 	}
-	duration, ok := getRequestedDuration(r.URL.Query())
-	if !ok {
-		duration = h.defaultTimeout
-	}
-
-	if h.lock.Acquire(duration) {
-		respondOk(w, r)
-	} else {
-		respondLocked(w, r)
-	}
-}
-
-func getRequestedDuration(values url.Values) (time.Duration, bool) {
-	durationStr := values.Get("duration")
-	if durationStr == "" {
-		return 0, false
-	}
-	duration, err := strconv.Atoi(durationStr)
-	if err != nil {
-		log.Printf("Invalid duration requested: '%v'", durationStr)
-		return 0, false
-	}
-	return time.Duration(duration) * time.Second, true
-}
-
-func respondOk(w http.ResponseWriter, r *http.Request) {
-	status := http.StatusOK
-	log.Printf("Responding to '%v': %v", r.RemoteAddr, status)
-	w.WriteHeader(status)
-	w.Write([]byte("Lock acquired"))
-}
-
-func respondLocked(w http.ResponseWriter, r *http.Request) {
-	status := http.StatusLocked
-	log.Printf("Responding to '%v': %v", r.RemoteAddr, status)
-	w.WriteHeader(status)
-	w.Write([]byte("Locked"))
+	log.Info("configured web server", log.String("address", server.Addr))
+	return server
 }

@@ -17,38 +17,43 @@ If not, see <https://www.gnu.org/licenses/>.
 package service
 
 import (
-	"flakybit.net/psl/k8s-health/client"
-	"flakybit.net/psl/k8s-health/config"
+	"context"
+	. "flakybit.net/psl/k8s-health/client"
+	. "flakybit.net/psl/k8s-health/config"
+	log "log/slog"
 )
 
-type HealthChecker interface {
-	IsHealthy() bool
-}
-
 type HealthCheckService struct {
-	conf        config.Config
-	client      *client.K8sClient
+	conf        Config
+	client      *K8sClient
 	dsChecker   *DaemonSetChecker
 	loadChecker *NodeLoadChecker
 }
 
-func NewHealthCheckService(conf config.Config, k8sClient *client.K8sClient) *HealthCheckService {
-	nodeInfo := k8sClient.GetNodeInfo(conf.NodeName)
+func NewHealthCheckService(ctx context.Context, conf Config, k8sClient *K8sClient) *HealthCheckService {
+	nodeInfo := k8sClient.GetNodeInfo(ctx, conf.NodeName)
 	hcSvc := HealthCheckService{
 		conf,
 		k8sClient,
 		NewDaemonSetChecker(conf, k8sClient, nodeInfo),
 		NewNodeLoadChecker(conf, k8sClient, nodeInfo),
 	}
-	if conf.DaemonSetHC.Enabled {
-		go hcSvc.dsChecker.Run()
-	}
-	if conf.NodeLoadHC.Enabled {
-		go hcSvc.loadChecker.Run()
-	}
+	log.Info("configured health check service",
+		log.Bool("daemon-set-check", conf.DaemonSetHC.Enabled),
+		log.Bool("node-load-check", conf.NodeLoadHC.Enabled))
 	return &hcSvc
+}
+func (hcs *HealthCheckService) Run(ctx context.Context) {
+	if hcs.conf.DaemonSetHC.Enabled {
+		go hcs.dsChecker.Run(ctx)
+	}
+	if hcs.conf.NodeLoadHC.Enabled {
+		go hcs.loadChecker.Run(ctx)
+	}
 }
 
 func (hcs *HealthCheckService) IsHealthy() bool {
-	return hcs.dsChecker.IsHealthy() && hcs.loadChecker.IsHealthy()
+	healthy := hcs.dsChecker.IsHealthy() && hcs.loadChecker.IsHealthy()
+	log.Debug("overall health status", log.Bool("status", healthy))
+	return healthy
 }

@@ -15,7 +15,6 @@ If not, see <https://www.gnu.org/licenses/>.
 
 This file incorporates work covered by the following copyright and permission notice:
 	Copyright (c) 2018, Oath Inc.
-	Copyright (c) 2022, The PSL (Pod Startup LockService) Authors
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -36,46 +35,97 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package main
+package service
 
 import (
-	"context"
-	. "flakybit.net/psl/lock/client"
-	. "flakybit.net/psl/lock/config"
-	. "flakybit.net/psl/lock/service"
-	. "flakybit.net/psl/lock/web"
-	log "log/slog"
+	"fmt"
+	"log"
+	"regexp"
 )
 
-func main() {
-	var err error
-	ctx := context.Background()
+var endpointPattern = regexp.MustCompile(`^(\S+?)://(.*)$`)
+var addressPattern = regexp.MustCompile(`^(\S+):(\d+)$`)
 
-	conf, err := NewConfig(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", log.Any("error", err))
-		panic(err)
+type Endpoint interface {
+	Protocol() string
+	String() string
+	IsHttp() bool
+}
+
+type RawEndpoint interface {
+	Endpoint
+	Address() string
+}
+
+type HttpEndpoint interface {
+	Endpoint
+	Url() string
+}
+
+type EndpointData struct {
+	protocol string
+}
+
+type RawEndpointData struct {
+	EndpointData
+	address string
+}
+
+type HttpEndpointData struct {
+	EndpointData
+	url string
+}
+
+func (e *RawEndpointData) String() string {
+	return fmt.Sprintf("%s", e.address)
+}
+
+func (e *HttpEndpointData) String() string {
+	return fmt.Sprintf("%s", e.url)
+}
+
+func (e *EndpointData) Protocol() string {
+	return e.protocol
+}
+
+func (e *EndpointData) IsHttp() bool {
+	return isHttp(e.Protocol())
+}
+
+func isHttp(protocol string) bool {
+	return protocol == "http" || protocol == "https"
+}
+
+func (e *RawEndpointData) Address() string {
+	return e.address
+}
+
+func (e *HttpEndpointData) Url() string {
+	return e.url
+}
+
+func ParseEndpoint(str string) Endpoint {
+	match := endpointPattern.FindStringSubmatch(str)
+	if match == nil || len(match) != 3 {
+		log.Panicf("Endpoint malformed: '%s'", str)
 	}
-
-	healthClient := NewHealthClient(conf)
-	healthService := NewHealthCheckService(conf, healthClient)
-	go healthService.Run(ctx)
-
-	//healthFunc := endpointChecker.HealthFunction()
-	//lock := NewLockService(conf.ParallelLocks)
-	//handler := NewLockHandler(&lock, conf.LockDuration, healthFunc)
-	//if conf.HealthCheck.Enabled {
-	//	go endpointChecker.Run()
-	//}
-
-	lockService := NewLockService(conf)
-	controller := NewController(conf, healthService, lockService)
-	httpServer := NewHttpServer(conf, controller)
-	err = httpServer.ListenAndServe()
-	if err != nil {
-		log.ErrorContext(ctx, "failed to start http server", log.Any("error", err))
-		panic(err)
+	protocol := match[1]
+	address := match[2]
+	if isHttp(protocol) {
+		return CreateHttp(protocol, str)
+	} else {
+		return CreateRaw(protocol, address)
 	}
+}
 
-	select {} // Wait forever and let child goroutines run
+func CreateRaw(protocol string, address string) RawEndpoint {
+	match := addressPattern.FindStringSubmatch(address)
+	if match == nil || len(match) != 3 {
+		log.Panicf("Address malformed: '%s'", address)
+	}
+	return &RawEndpointData{EndpointData{protocol}, address}
+}
+
+func CreateHttp(protocol string, url string) HttpEndpoint {
+	return &HttpEndpointData{EndpointData{protocol}, url}
 }

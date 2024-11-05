@@ -35,97 +35,74 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package config
+package client
 
 import (
+	"context"
+	. "flakybit.net/psl/lock/config"
 	"fmt"
-	"log"
-	"regexp"
+	"io"
+	log "log/slog"
+	"net"
+	"net/http"
 )
 
-var endpointPattern = regexp.MustCompile(`^(\S+?)://(.*)$`)
-var addressPattern = regexp.MustCompile(`^(\S+):(\d+)$`)
+const maxIdleConnections = 10
 
-type Endpoint interface {
-	Protocol() string
-	String() string
-	IsHttp() bool
+type HealthClient struct {
+	conf       Config
+	httpClient *http.Client
+	rawClient  *net.Dialer
 }
 
-type RawEndpoint interface {
-	Endpoint
-	Address() string
-}
-
-type HttpEndpoint interface {
-	Endpoint
-	Url() string
-}
-
-type EndpointData struct {
-	protocol string
-}
-
-type RawEndpointData struct {
-	EndpointData
-	address string
-}
-
-type HttpEndpointData struct {
-	EndpointData
-	url string
-}
-
-func (e *RawEndpointData) String() string {
-	return fmt.Sprintf("%s", e.address)
-}
-
-func (e *HttpEndpointData) String() string {
-	return fmt.Sprintf("%s", e.url)
-}
-
-func (e *EndpointData) Protocol() string {
-	return e.protocol
-}
-
-func (e *EndpointData) IsHttp() bool {
-	return isHttp(e.Protocol())
-}
-
-func isHttp(protocol string) bool {
-	return protocol == "http" || protocol == "https"
-}
-
-func (e *RawEndpointData) Address() string {
-	return e.address
-}
-
-func (e *HttpEndpointData) Url() string {
-	return e.url
-}
-
-func ParseEndpoint(str string) Endpoint {
-	match := endpointPattern.FindStringSubmatch(str)
-	if match == nil || len(match) != 3 {
-		log.Panicf("Endpoint malformed: '%s'", str)
+func NewHealthClient(conf Config) *HealthClient {
+	httpClient := &http.Client{
+		Transport: &http.Transport{MaxIdleConnsPerHost: maxIdleConnections},
+		Timeout:   conf.HealthCheck.Timeout,
 	}
-	protocol := match[1]
-	address := match[2]
-	if isHttp(protocol) {
-		return CreateHttp(protocol, str)
-	} else {
-		return CreateRaw(protocol, address)
+	dialer := &net.Dialer{
+		Timeout: conf.HealthCheck.Timeout,
 	}
+
+	client := &HealthClient{
+		conf,
+		httpClient,
+		dialer,
+	}
+	log.Info("configured Lock httpClient")
+	return client
 }
 
-func CreateRaw(protocol string, address string) RawEndpoint {
-	match := addressPattern.FindStringSubmatch(address)
-	if match == nil || len(match) != 3 {
-		log.Panicf("Address malformed: '%s'", address)
+func (c *HealthClient) CheckRaw(ctx context.Context, protocol, address string) (bool, error) {
+	conn, err := c.rawClient.DialContext(ctx, protocol, address)
+	log.Debug("checking raw endpoint", log.String("endpoint", fmt.Sprintf("%s://%s", protocol, address)))
+	if err != nil {
+		return false, err
 	}
-	return &RawEndpointData{EndpointData{protocol}, address}
+	err = conn.Close()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
-func CreateHttp(protocol string, url string) HttpEndpoint {
-	return &HttpEndpointData{EndpointData{protocol}, url}
+func (c *HealthClient) CheckHttp(ctx context.Context, url string) (bool, error) {
+	request, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return false, err
+	}
+
+	log.Debug("checking HTTP endpoint", log.String("url", request.URL.String()))
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return false, err
+	}
+	_, err = io.ReadAll(response.Body)
+	err = response.Body.Close()
+	if err != nil {
+		return false, err
+	}
+
+	return response.StatusCode >= 200 && response.StatusCode < 300, nil
 }

@@ -1,8 +1,8 @@
 /*
-This file is part of PSL (Pod Startup Lock).
-Copyright (c) 2024, The PSL (Pod Startup Lock) Authors
+This file is part of PSL (Pod Startup LockService).
+Copyright (c) 2024, The PSL (Pod Startup LockService) Authors
 
-PSL (Pod Startup Lock) is free software:
+PSL (Pod Startup LockService) is free software:
 you can redistribute it and/or modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation, version 3 of the License.
 
@@ -35,96 +35,57 @@ This file incorporates work covered by the following copyright and permission no
 	SOFTWARE.
 */
 
-package state
+package service
 
 import (
-	"github.com/stretchr/testify/require"
-	"testing"
+	. "flakybit.net/psl/lock/config"
+	log "log/slog"
+	"sync"
 	"time"
 )
 
-var duration = time.Duration(10) * time.Second
-
-func TestAcquireSingleIfFirst(t *testing.T) {
-	// GIVEN
-	lock := NewLock(1)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.True(t, success)
+type LockService struct {
+	conf  Config
+	mutex sync.Mutex
+	locks []time.Time
 }
 
-func TestAcquireSingleIfSecond(t *testing.T) {
-	// GIVEN
-	lock := NewLock(1)
-	lock.Acquire(duration)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.False(t, success)
+func NewLockService(conf Config) *LockService {
+	service := &LockService{conf: conf}
+	log.Info("configured lock service")
+	return service
 }
 
-func TestAcquireSingleIfReleased(t *testing.T) {
-	// GIVEN
-	lock := NewLock(1)
-	lock.Acquire(0)
+func (ls *LockService) Acquire(duration time.Duration) bool {
+	ls.mutex.Lock()
+	defer ls.mutex.Unlock()
 
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.True(t, success)
+	ls.removeExpired()
+	if len(ls.locks) < ls.conf.ParallelLocks {
+		ls.addNew(duration)
+		log.Info("lock acquired",
+			log.Int("duration", int(duration.Seconds())),
+			log.Int("locks", len(ls.locks)))
+		return true
+	}
+	return false
 }
 
-func TestAcquireMultipleIfFirst(t *testing.T) {
-	// GIVEN
-	lock := NewLock(2)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.True(t, success)
+func (ls *LockService) addNew(duration time.Duration) {
+	expireTime := time.Now().Add(duration)
+	ls.locks = append(ls.locks, expireTime)
 }
 
-func TestAcquireMultipleIfSecond(t *testing.T) {
-	// GIVEN
-	lock := NewLock(2)
-	lock.Acquire(duration)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.True(t, success)
+func (ls *LockService) removeExpired() {
+	var live []time.Time
+	for i := 0; i < len(ls.locks); i++ {
+		if !isExpired(ls.locks[i]) {
+			live = append(live, ls.locks[i])
+		}
+	}
+	ls.locks = live
 }
 
-func TestAcquireMultipleIfExceed(t *testing.T) {
-	// GIVEN
-	lock := NewLock(2)
-	lock.Acquire(duration)
-	lock.Acquire(duration)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.False(t, success)
-}
-
-func TestAcquireMultipleIfReleased(t *testing.T) {
-	// GIVEN
-	lock := NewLock(2)
-	lock.Acquire(0)
-	lock.Acquire(duration)
-
-	// WHEN
-	success := lock.Acquire(duration)
-
-	// THEN
-	require.True(t, success)
+func isExpired(t time.Time) bool {
+	return time.Now().After(t)
 }

@@ -18,9 +18,9 @@ package config
 
 import (
 	"context"
+	"errors"
 	"github.com/sethvargo/go-envconfig"
 	log "log/slog"
-	"os"
 	"time"
 )
 
@@ -37,44 +37,43 @@ type HealthCheckConfig struct {
 	Endpoints    []string      `env:"ENDPOINTS"`                // Health check tcp endpoint, host:port
 	PeriodOnFail time.Duration `env:"PERIOD_FAIL, default=10s"` // Pause between endpoint health checks if previous failed
 	PeriodOnPass time.Duration `env:"PERIOD_PASS, default=60s"` // Pause between endpoint health checks if previous succeeded
+	Timeout      time.Duration `env:"TIMEOUT, default=10s"`     // Timeout of health checks
 }
 
-func NewConfig(ctx context.Context) Config {
+func NewConfig(ctx context.Context) (Config, error) {
 	var conf Config
 	err := envconfig.Process(ctx, &conf)
 	if err != nil {
-		log.Error("cannot not process configuration", err)
-		os.Exit(1)
+		return conf, err
 	}
-	valid := conf.validate()
-	if !valid {
-		os.Exit(1)
+	err = conf.validate()
+	if err != nil {
+		return conf, err
 	}
 	log.Info("application configured", log.Any("config", conf))
-	return conf
+	return conf, err
 }
 
-func (c *Config) validate() bool {
-	valid := true
+func (c *Config) validate() error {
+	var parallelLocksError error
 	if c.ParallelLocks < 1 {
-		log.Error("parallel locks is lesser than 0")
-		valid = false
+		parallelLocksError = errors.New("parallel locks is lesser than 0")
 	}
+	var lockDurationError error
 	if c.LockDuration < 0 {
-		log.Error("lock duration is lesser than 0")
-		valid = false
+		lockDurationError = errors.New("lock duration is lesser than 0")
 	}
+	var hcPeriodPassError error
 	if c.HealthCheck.PeriodOnPass < 0 {
-		log.Error("period on pass is lesser than 0")
-		valid = false
+		hcPeriodPassError = errors.New("period on pass is lesser than 0")
 	}
+	var hcPeriodFailError error
 	if c.HealthCheck.PeriodOnFail < 0 {
-		log.Error("period on fail is lesser than 0")
-		valid = false
+		hcPeriodFailError = errors.New("period on fail is lesser than 0")
 	}
+	var hcEndpointsError error
 	if c.HealthCheck.Enabled && len(c.HealthCheck.Endpoints) == 0 {
-		log.Error("endpoints health check is enabled, but endpoint list is empty")
-		valid = false
+		hcEndpointsError = errors.New("endpoints health check is enabled, but endpoint list is empty")
 	}
-	return valid
+	return errors.Join(parallelLocksError, lockDurationError, hcPeriodPassError, hcPeriodFailError, hcEndpointsError)
 }

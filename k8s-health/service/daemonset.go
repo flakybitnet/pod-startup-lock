@@ -39,11 +39,12 @@ This file incorporates work covered by the following copyright and permission no
 package service
 
 import (
-	"flakybit.net/psl/common/util"
-	"flakybit.net/psl/k8s-health/client"
-	"flakybit.net/psl/k8s-health/config"
+	"context"
+	. "flakybit.net/psl/common/util"
+	. "flakybit.net/psl/k8s-health/client"
+	. "flakybit.net/psl/k8s-health/config"
 	"fmt"
-	"log"
+	log "log/slog"
 	"time"
 
 	apps "k8s.io/api/apps/v1"
@@ -51,100 +52,123 @@ import (
 )
 
 type DaemonSetChecker struct {
-	conf       config.Config
-	client     *client.K8sClient
+	conf       Config
+	client     *K8sClient
 	nodeLabels map[string]string
 	healthy    bool
 }
 
-func NewDaemonSetChecker(conf config.Config, client *client.K8sClient, node *core.Node) *DaemonSetChecker {
-	return &DaemonSetChecker{conf, client, node.Labels, false}
+func NewDaemonSetChecker(conf Config, client *K8sClient, node *core.Node) *DaemonSetChecker {
+	checker := &DaemonSetChecker{conf, client, node.Labels, false}
+	log.Info("configured DaemonSet checker")
+	return checker
 }
 
 func (dsc *DaemonSetChecker) IsHealthy() bool {
+	if !dsc.conf.DaemonSetHC.Enabled {
+		return true
+	}
 	return dsc.healthy
 }
 
-func (dsc *DaemonSetChecker) Run() {
+func (dsc *DaemonSetChecker) Run(ctx context.Context) {
+	ticker := time.NewTicker(dsc.conf.DaemonSetHC.PeriodOnFail)
+	defer ticker.Stop()
+
 	for {
-		if dsc.check() {
-			log.Print("HealthCheck passed")
-			dsc.healthy = true
-			time.Sleep(dsc.conf.DaemonSetHC.PeriodOnPass)
-		} else {
-			log.Print("HealthCheck failed")
-			dsc.healthy = false
-			time.Sleep(dsc.conf.DaemonSetHC.PeriodOnPass)
+		checkStatus := dsc.check(ctx)
+		if checkStatus != dsc.healthy {
+			if checkStatus {
+				ticker.Reset(dsc.conf.DaemonSetHC.PeriodOnPass)
+			} else {
+				ticker.Reset(dsc.conf.DaemonSetHC.PeriodOnFail)
+			}
+		}
+		log.Debug("performed DaemonSet health check", log.Bool("healthy", checkStatus))
+		dsc.healthy = checkStatus
+
+		select {
+		case <-ticker.C:
+			continue
+		case <-ctx.Done():
+			return
 		}
 	}
 }
 
-func (dsc *DaemonSetChecker) check() bool {
-	log.Print("---")
-	log.Print("HealthCheck:")
-	daemonSets := dsc.client.GetDaemonSets(dsc.conf.DaemonSetHC.Namespace)
-	if dsc.checkAllDaemonSetsReady(daemonSets) {
+func (dsc *DaemonSetChecker) check(ctx context.Context) bool {
+	daemonSets := dsc.client.GetDaemonSets(ctx, dsc.conf.DaemonSetHC.Namespace)
+	requiredDaemonSets := dsc.getRequiredDaemonSets(daemonSets)
+	if dsc.checkDaemonSetsReady(requiredDaemonSets) {
 		return true
 	}
-	nodePods := dsc.client.GetNodePods(dsc.conf.NodeName)
-	return dsc.checkAllDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
+	nodePods := dsc.client.GetNodePods(ctx, dsc.conf.NodeName)
+	return dsc.checkDaemonSetsPodsAvailableOnNode(daemonSets, nodePods)
 }
 
-func (dsc *DaemonSetChecker) checkAllDaemonSetsReady(daemonSets []apps.DaemonSet) bool {
+func (dsc *DaemonSetChecker) getRequiredDaemonSets(daemonSets []apps.DaemonSet) []apps.DaemonSet {
+	requiredDaemonSets := make([]apps.DaemonSet, len(daemonSets))
 	for _, ds := range daemonSets {
-		if required, reason := dsc.checkRequired(&ds); !required {
-			log.Print(reason)
-			continue
-		}
-		status := ds.Status
-		if status.DesiredNumberScheduled != status.NumberReady {
-			log.Printf("'%v' daemonSet not ready: Desired: '%v', Ready: '%v'",
-				ds.Name, status.DesiredNumberScheduled, status.NumberReady)
-			return false
-		}
-		log.Printf("'%v': ok", ds.Name)
-	}
-	log.Print("All DaemonSets ok")
-	return true
-}
-
-func (dsc *DaemonSetChecker) checkAllDaemonSetsPodsAvailableOnNode(daemonSets []apps.DaemonSet, pods []core.Pod) bool {
-	for _, ds := range daemonSets {
-		if required, reason := dsc.checkRequired(&ds); !required {
-			log.Print(reason)
-			continue
-		}
-		log.Printf("'%v' daemonSet: Looking for Pods on node", ds.Name)
-		pod, found := findDaemonSetPod(&ds, pods)
-		if !found {
-			log.Printf("'%v' daemonSet: No Pods found", ds.Name)
-			return false
-		}
-		log.Printf("'%v' daemonSet: Found Pod: '%v'", ds.Name, pod.Name)
-		if !isPodReady(pod) {
-			return false
+		required, reason := dsc.checkRequired(&ds)
+		if required {
+			requiredDaemonSets = append(requiredDaemonSets, ds)
+		} else {
+			log.Debug("skipping DaemonSet", log.String("reason", reason))
 		}
 	}
-	log.Print("All DaemonSets Pods available on node")
-	return true
+	return requiredDaemonSets
 }
 
 func (dsc *DaemonSetChecker) checkRequired(ds *apps.DaemonSet) (bool, string) {
 	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
-	if len(dsc.conf.DaemonSetHC.Exclude) > 0 && util.MapContainsAny(ds.Labels, dsc.conf.DaemonSetHC.Exclude) {
+	if len(dsc.conf.DaemonSetHC.Exclude) > 0 && MapContainsAny(ds.Labels, dsc.conf.DaemonSetHC.Exclude) {
 		return false, reason + "matches exclude labels"
 	}
-	if len(dsc.conf.DaemonSetHC.Include) > 0 && !util.MapContainsAll(ds.Labels, dsc.conf.DaemonSetHC.Include) {
+	if len(dsc.conf.DaemonSetHC.Include) > 0 && !MapContainsAll(ds.Labels, dsc.conf.DaemonSetHC.Include) {
 		return false, reason + "not matches include labels"
 	}
 	if dsc.conf.DaemonSetHC.HostNetwork && !ds.Spec.Template.Spec.HostNetwork {
 		return false, reason + "not on host network"
 	}
 	nodeSelector := ds.Spec.Template.Spec.NodeSelector
-	if !util.MapContainsAll(dsc.nodeLabels, nodeSelector) {
+	if !MapContainsAll(dsc.nodeLabels, nodeSelector) {
 		return false, reason + "not eligible for scheduling on node"
 	}
 	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)
+}
+
+func (dsc *DaemonSetChecker) checkDaemonSetsReady(daemonSets []apps.DaemonSet) bool {
+	for _, ds := range daemonSets {
+		status := ds.Status
+		if status.DesiredNumberScheduled != status.NumberReady {
+			log.Info("DaemonSet is not ready",
+				log.String("daemon-set", ds.Name),
+				log.Int("desired", int(status.DesiredNumberScheduled)),
+				log.Int("ready", int(status.NumberReady)))
+			return false
+		}
+		log.Debug("DaemonSet is ready", log.String("daemon-set", ds.Name))
+	}
+	log.Debug("all DaemonSets are ready")
+	return true
+}
+
+func (dsc *DaemonSetChecker) checkDaemonSetsPodsAvailableOnNode(daemonSets []apps.DaemonSet, pods []core.Pod) bool {
+	for _, ds := range daemonSets {
+		log.Debug("looking for pods on node", log.String("daemon-set", ds.Name))
+		pod, found := findDaemonSetPod(&ds, pods)
+		if !found {
+			log.Info("no pod found", log.String("daemon-set", ds.Name))
+			return false
+		}
+		log.Debug("pod found", log.String("daemon-set", ds.Name), log.String("pod", pod.Name))
+		if !isPodReady(pod) {
+			log.Info("pod is not ready", log.String("daemon-set", ds.Name), log.String("pod", pod.Name))
+			return false
+		}
+	}
+	log.Debug("all DaemonSets pods are available on node")
+	return true
 }
 
 func findDaemonSetPod(ds *apps.DaemonSet, pods []core.Pod) (*core.Pod, bool) {
@@ -156,26 +180,30 @@ func findDaemonSetPod(ds *apps.DaemonSet, pods []core.Pod) (*core.Pod, bool) {
 	return nil, false
 }
 
-func isPodReady(pod *core.Pod) bool {
-	if pod.Status.Phase != "Running" {
-		log.Printf("'%v' Pod: Not running: Phase: '%v'", pod.Name, pod.Status.Phase)
-		return false
-	}
-	for _, cond := range pod.Status.Conditions {
-		if cond.Type == "Ready" && cond.Status == "True" {
-			log.Printf("'%v' Pod: Ready", pod.Name)
-			return true
-		}
-	}
-	log.Printf("'%v' Pod: Not Ready: '%v'", pod.Name, pod.Status.Conditions)
-	return false
-}
-
 func isPodOwnedByDs(pod *core.Pod, ds *apps.DaemonSet) bool {
 	for _, ref := range pod.ObjectMeta.OwnerReferences {
 		if ds.ObjectMeta.UID == ref.UID {
 			return true
 		}
 	}
+	return false
+}
+
+func isPodReady(pod *core.Pod) bool {
+	if pod.Status.Phase != "Running" {
+		log.Debug("pod is not running",
+			log.String("pod", pod.Name),
+			log.String("phase", string(pod.Status.Phase)))
+		return false
+	}
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == "Ready" && cond.Status == "True" {
+			log.Debug("pod is ready", log.String("pod", pod.Name))
+			return true
+		}
+	}
+	log.Debug("pod is not ready",
+		log.String("pod", pod.Name),
+		log.Any("conditions", pod.Status.Conditions))
 	return false
 }

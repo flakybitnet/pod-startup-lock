@@ -18,9 +18,9 @@ package config
 
 import (
 	"context"
+	"errors"
 	"github.com/sethvargo/go-envconfig"
 	log "log/slog"
-	"os"
 	"time"
 )
 
@@ -49,34 +49,40 @@ type NodeLoadHealthCheckConfig struct {
 	Period       time.Duration `env:"PERIOD, default=10s"`
 }
 
-func NewConfig(ctx context.Context) Config {
+func NewConfig(ctx context.Context) (Config, error) {
 	var conf Config
 	err := envconfig.Process(ctx, &conf)
 	if err != nil {
-		log.Error("cannot process configuration", err)
-		os.Exit(1)
+		return conf, err
 	}
-	valid := conf.validate()
-	if !valid {
-		os.Exit(1)
+	err = conf.validate()
+	if err != nil {
+		return conf, err
 	}
 	log.Info("application configured", log.Any("config", conf))
-	return conf
+	return conf, err
 }
 
-func (c *Config) validate() bool {
-	valid := true
+func (c *Config) validate() error {
+	var dsIncludeExcludeError error
 	if len(c.DaemonSetHC.Include) > 0 && len(c.DaemonSetHC.Exclude) > 0 {
-		log.Error("cannot specify both Included and Excluded DaemonSet labels, choose one")
-		valid = false
+		dsIncludeExcludeError = errors.New("cannot specify both Included and Excluded DaemonSet ")
 	}
+	var dsPeriodPassError error
 	if c.DaemonSetHC.PeriodOnPass < 0 {
-		log.Error("period on pass is lesser than 0")
-		valid = false
+		dsPeriodPassError = errors.New("period of success DaemonSet check is lesser than 0")
 	}
+	var dsPeriodFailError error
 	if c.DaemonSetHC.PeriodOnFail < 0 {
-		log.Error("period on fail is lesser than 0")
-		valid = false
+		dsPeriodFailError = errors.New("period of failed DaemonSet check is lesser than 0")
 	}
-	return valid
+	var nlThresholdError error
+	if c.NodeLoadHC.CpuThreshold < 0 || c.NodeLoadHC.CpuThreshold > 100 {
+		nlThresholdError = errors.New("cpu threshold of node load check is out of interval [0, 100]")
+	}
+	var nlPeriodError error
+	if c.NodeLoadHC.Period < 0 {
+		nlPeriodError = errors.New("period of node load check is lesser than 0")
+	}
+	return errors.Join(dsIncludeExcludeError, dsPeriodPassError, dsPeriodFailError, nlThresholdError, nlPeriodError)
 }

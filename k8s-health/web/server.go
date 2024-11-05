@@ -38,8 +38,9 @@ This file incorporates work covered by the following copyright and permission no
 package web
 
 import (
-	"flakybit.net/psl/k8s-health/config"
+	. "flakybit.net/psl/k8s-health/config"
 	"fmt"
+	log "log/slog"
 	"net/http"
 	"time"
 )
@@ -50,12 +51,14 @@ const (
 	idleTimeout  = 10 * time.Second
 )
 
-func NewHttpServer(conf config.Config, controller http.Handler) *http.Server {
-	return &http.Server{
+func NewHttpServer(conf Config, controller http.Handler) *http.Server {
+	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", conf.BindHost, conf.BindPort),
 		Handler:      controller,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
 	}
+	log.Info("configured web server", log.String("address", server.Addr))
+	return server
 }
