@@ -78,6 +78,9 @@ func (dsc *DaemonSetChecker) Run(ctx context.Context) {
 	for {
 		checkStatus := dsc.check(ctx)
 		if checkStatus != dsc.healthy {
+			log.Info("DaemonSet health check status changed",
+				log.Bool("old", dsc.healthy),
+				log.Bool("new", checkStatus))
 			if checkStatus {
 				ticker.Reset(dsc.conf.DaemonSetHC.PeriodOnPass)
 			} else {
@@ -120,7 +123,7 @@ func (dsc *DaemonSetChecker) getRequiredDaemonSets(daemonSets []apps.DaemonSet) 
 }
 
 func (dsc *DaemonSetChecker) checkRequired(ds *apps.DaemonSet) (bool, string) {
-	reason := fmt.Sprintf("'%v' daemonSet Excluded from healthcheck: ", ds.Name)
+	reason := fmt.Sprintf("'%s/%s' daemonSet Excluded from healthcheck: ", ds.Namespace, ds.Name)
 	if len(dsc.conf.DaemonSetHC.Exclude) > 0 && MapContainsAny(ds.Labels, dsc.conf.DaemonSetHC.Exclude) {
 		return false, reason + "matches exclude labels"
 	}
@@ -134,7 +137,7 @@ func (dsc *DaemonSetChecker) checkRequired(ds *apps.DaemonSet) (bool, string) {
 	if len(nodeSelector) > 0 && !MapContainsAll(dsc.nodeLabels, nodeSelector) {
 		return false, reason + "not eligible for scheduling on node"
 	}
-	return true, fmt.Sprintf("'%v' daemonSet healthcheck required", ds.Name)
+	return true, fmt.Sprintf("'%s/%s' daemonSet healthcheck required", ds.Namespace, ds.Name)
 }
 
 func (dsc *DaemonSetChecker) checkDaemonSetsReady(daemonSets []apps.DaemonSet) bool {

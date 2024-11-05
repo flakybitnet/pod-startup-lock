@@ -81,6 +81,9 @@ func (hcs *HealthCheckService) Run(ctx context.Context) {
 	for {
 		checkStatus := hcs.checkAll(ctx, hcs.endpoints)
 		if checkStatus != hcs.healthy {
+			log.Info("health checks status changed",
+				log.Bool("old", hcs.healthy),
+				log.Bool("new", checkStatus))
 			if checkStatus {
 				ticker.Reset(hcs.conf.HealthCheck.PeriodOnPass)
 			} else {

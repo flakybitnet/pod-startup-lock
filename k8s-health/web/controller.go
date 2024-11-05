@@ -62,7 +62,7 @@ func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		message = "Unhealthy"
 	}
 
-	log.Info("responding to health request",
+	log.Debug("responding to health request",
 		log.String("client-ip", r.RemoteAddr),
 		log.Int("status", status))
 

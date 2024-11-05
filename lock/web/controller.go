@@ -80,14 +80,14 @@ func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		message = "Locked"
 	}
 
-	log.Info("responding to health request",
+	log.Info("responding to lock request",
 		log.String("client-ip", r.RemoteAddr),
 		log.Int("status", status))
 
 	w.WriteHeader(status)
 	_, err := fmt.Fprint(w, message)
 	if err != nil {
-		log.Error("failed to respond to health check request",
+		log.Error("failed to respond to lock request",
 			log.String("client-ip", r.RemoteAddr),
 			log.Int("status", status),
 			log.Any("error", err))

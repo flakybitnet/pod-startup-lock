@@ -69,7 +69,7 @@ func NewHealthClient(conf Config) *HealthClient {
 		httpClient,
 		dialer,
 	}
-	log.Info("configured Lock httpClient")
+	log.Info("configured health client")
 	return client
 }
 

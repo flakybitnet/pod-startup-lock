@@ -64,6 +64,11 @@ func (nlc *NodeLoadChecker) Run(ctx context.Context) {
 
 	for {
 		checkStatus := nlc.check(ctx)
+		if checkStatus != nlc.healthy {
+			log.Info("node load check status changed",
+				log.Bool("old", nlc.healthy),
+				log.Bool("new", checkStatus))
+		}
 		log.Debug("performed node load health check", log.Bool("healthy", checkStatus))
 		nlc.healthy = checkStatus
 
@@ -81,11 +86,10 @@ func (nlc *NodeLoadChecker) check(ctx context.Context) bool {
 	cpuUsageMilli := metrics.Usage.Cpu().MilliValue()
 	cpuUsageShare := float64(cpuUsageMilli) / float64(nlc.nodeCpuCapacity.MilliValue())
 	cpuUsagePct := int(math.Round(cpuUsageShare * 100))
-	log.Debug("node CPU usage", log.Int64("cpu-milli", cpuUsageMilli), log.Int("cpu-pct", cpuUsagePct))
+	log.Debug("node CPU usage",
+		log.Int64("cpu-milli", cpuUsageMilli),
+		log.Int("cpu-pct", cpuUsagePct),
+		log.Int("threshold", nlc.conf.NodeLoadHC.CpuThreshold))
 
-	if cpuUsagePct > nlc.conf.NodeLoadHC.CpuThreshold {
-		log.Info("node overload", log.Int("load", cpuUsagePct), log.Int("threshold", nlc.conf.NodeLoadHC.CpuThreshold))
-		return false
-	}
-	return true
+	return cpuUsagePct < nlc.conf.NodeLoadHC.CpuThreshold
 }
