@@ -37,7 +37,7 @@ func main() {
 
 	conf, err := NewConfig(ctx)
 	if err != nil {
-		log.ErrorContext(ctx, "failed to configure application", err)
+		log.ErrorContext(ctx, "failed to configure application", log.Any("error", err))
 		panic(err)
 	}
 
