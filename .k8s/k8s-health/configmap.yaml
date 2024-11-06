@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-health
+  namespace: psl
+  labels:
+    app.kubernetes.io/name: k8s-health
+data:
+  PSL_BIND_PORT: "8080"
+  PSL_HC_DAEMONSET_ENABLED: "true"
+  PSL_HC_DAEMONSET_HOST_NETWORK: "true"
+  PSL_HC_NODELOAD_ENABLED: "true"
+  PSL_HC_NODELOAD_CPU_THRESHOLD: "70"

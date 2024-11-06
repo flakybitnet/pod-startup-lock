@@ -20,24 +20,22 @@ spec:
         - name: k8s-health
           # image: <registry>/psl/k8s-health:<version>
           # image: <registry>/flakybitnet/psl-k8s-health:<version>
-          image: harbor.flakybit.net/psl/k8s-health:1.1.0
-          args:
-            - --port
-            - "9999"
+          image: harbor.flakybit.net/psl/k8s-health:2.0.0
+          envFrom:
+            - configMapRef:
+                name: k8s-health
           env:
-            - name: NODE_NAME
+            - name: PSL_NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
           ports:
             - name: http
-              containerPort: 9999
+              containerPort: 8080
           resources:
             requests:
-              cpu: 20m
+              cpu: 50m
               memory: 16Mi
             limits:
-              cpu: 1000m
-              memory: 24Mi
-      nodeSelector:
-        kubernetes.io/os: linux # check itself for readiness
+              cpu: 500m
+              memory: 32Mi

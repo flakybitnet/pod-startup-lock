@@ -1,6 +1,6 @@
 # Simple time-based lock service with HTTP interface.
 
-### Designed at [Oath](https://www.oath.com) to solve the [Thundering herd problem](https://en.wikipedia.org/wiki/Thundering_herd_problem) during multiple applications startup in the [Kubernetes](https://kubernetes.io) cluster. 
+### Designed at [Oath](https://www.oath.com) to solve the [Thundering herd problem](https://en.wikipedia.org/wiki/Thundering_herd_problem) during multiple applications startup in the [Kubernetes](https://kubernetes.io) clusters. 
 
 ## The Problem
 
@@ -8,8 +8,6 @@ Starting multiple applications simultaneously on the same host may cause a perfo
 In Kubernetes this usually happens when applications are automatically deployed to a newly added Node.
 In the worst-case scenario, application startup may be slowed down so dramatically that they fail to pass the healthcheck. 
 They are then restarted by Kubernetes just to start fighting for shared resources again, in an endless loop.
-
-See also [Containers startup throttling](https://github.com/kubernetes/kubernetes/issues/3312) Kubernetes issue.
 
 ## The Solution
 
@@ -38,8 +36,8 @@ See Readmes in subfolders for details.
 
 * [K8s-health](k8s-health/README.md)
   
-  Optional component. Performs healthcheck of Kubernetes DaemonSets.
-  May be used by Lock service to postpone lock acquiring until all DaemonSets on the Node are up and running.
+  Optional component. Performs healthcheck of Kubernetes DaemonSets and Node CPU load.
+  May be used by Lock service to postpone lock acquiring until all DaemonSets on the Node are up and running or Node is not overloaded.
 
 ## Images
 
@@ -98,6 +96,11 @@ The OCI images are available at
 
 ## Release Notes
 
+* `2.0.0`
+  - Added node load health check
+  - Reworked configuration
+  - Reworked logging
+  - and other refactorings
 * `1.1.0`
   - Migrated to go modules
   - Updated dependencies
@@ -121,3 +124,8 @@ Please feel free to submit issues, fork the repository and send pull requests!
 
 Source code is available at [Gitea](https://gitea.flakybit.net/flakybit/pod-startup-lock)
 and mirrored to [GitHub](https://github.com/flakybitnet/pod-startup-lock).
+
+## Links
+
+1. [Containers startup throttling](https://github.com/kubernetes/kubernetes/issues/3312) Kubernetes issue
+2. [Thundering Herd Scheduler](https://github.com/dbschenker/thundering-herd-scheduler)

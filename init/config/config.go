@@ -28,7 +28,7 @@ type Config struct {
 	LockHost     string        `env:"PSL_LOCK_HOST, required"`            // Lock service host
 	LockPort     int           `env:"PSL_LOCK_PORT, default=8080"`        // Lock service port
 	LockDuration time.Duration `env:"PSL_LOCK_DURATION"`                  // Custom lock duration to request
-	Period       time.Duration `env:"PSL_LOCK_CHECK_PERIOD, default=60s"` // Pause between lock acquisition attempts
+	Period       time.Duration `env:"PSL_LOCK_CHECK_PERIOD, default=3s"`  // Period of lock acquisition attempts
 	Timeout      time.Duration `env:"PSL_LOCK_CHECK_TIMEOUT, default=1s"` // Timeout of lock request
 }
 

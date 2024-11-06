@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lock
+  namespace: psl
+  labels:
+    app.kubernetes.io/name: lock
+data:
+  PSL_BIND_PORT: "8080"
+  PSL_PARALLEL_LOCKS: "2"
+  PSL_LOCK_DURATION: "20s"
+  PSL_HC_ENABLED: "true"
+  PSL_HC_ENDPOINTS: "http://k8s-health.psl.svc.cluster.local:8080"

@@ -25,7 +25,7 @@ import (
 )
 
 type Config struct {
-	BindHost    string                     `env:"PSL_BIND_HOST"`               // Host/Ip to bind
+	BindHost    string                     `env:"PSL_BIND_HOST"`               // Address to bind
 	BindPort    int                        `env:"PSL_BIND_PORT, default=8080"` // Port to bind
 	NodeName    string                     `env:"PSL_NODE_NAME, required"`     // K8s node name which the current app instance runs on
 	K8sApiUrl   string                     `env:"PSL_K8S_API_URL"`             // K8s API URL, for out-of-cluster usage only
@@ -37,16 +37,16 @@ type DaemonSetHealthCheckConfig struct {
 	Enabled      bool              `env:"ENABLED, default=true"`
 	Namespace    string            `env:"NAMESPACE"`                   // K8s Namespace to check DaemonSets in, blank for all namespaces
 	HostNetwork  bool              `env:"HOST_NETWORK, default=false"` // Host network DaemonSets only
-	Include      map[string]string `env:"INCLUDE_LABELS"`              // Include DaemonSet labels, label:value
-	Exclude      map[string]string `env:"EXCLUDE_LABELS"`              // Exclude DaemonSet labels, label:value
-	PeriodOnFail time.Duration     `env:"PERIOD_FAIL, default=10s"`    // Pause between DaemonSet health checks if previous failed
-	PeriodOnPass time.Duration     `env:"PERIOD_PASS, default=60s"`    // Pause between DaemonSet health checks if previous succeeded
+	Include      map[string]string `env:"INCLUDE_LABELS"`              // Include DaemonSet labels, "label1:value1,label2:value2"
+	Exclude      map[string]string `env:"EXCLUDE_LABELS"`              // Exclude DaemonSet labels, "label1:value1,label2:value2"
+	PeriodOnFail time.Duration     `env:"PERIOD_FAIL, default=10s"`    // Period of health checks if previous failed
+	PeriodOnPass time.Duration     `env:"PERIOD_PASS, default=60s"`    // Period of health checks if previous succeeded
 }
 
 type NodeLoadHealthCheckConfig struct {
 	Enabled      bool          `env:"ENABLED, default=false"`
-	CpuThreshold int           `env:"CPU_THRESHOLD, default=80"`
-	Period       time.Duration `env:"PERIOD, default=10s"`
+	CpuThreshold int           `env:"CPU_THRESHOLD, default=80"` // Node CPU utilisation in percent above which it is treated as unhealthy
+	Period       time.Duration `env:"PERIOD, default=10s"`       // Period of health checks
 }
 
 func NewConfig(ctx context.Context) (Config, error) {

@@ -12,5 +12,5 @@ spec:
     app.kubernetes.io/name: lock
   ports:
     - name: http
-      port: 8888
+      port: 8080
       targetPort: http

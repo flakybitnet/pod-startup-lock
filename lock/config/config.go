@@ -25,7 +25,7 @@ import (
 )
 
 type Config struct {
-	BindHost      string            `env:"PSL_BIND_HOST"`                  // Host/Ip to bind
+	BindHost      string            `env:"PSL_BIND_HOST"`                  // Address to bind
 	BindPort      int               `env:"PSL_BIND_PORT, default=8080"`    // Port to bind
 	ParallelLocks int               `env:"PSL_PARALLEL_LOCKS, default=1"`  // Number of locks allowed to acquire simultaneously
 	LockDuration  time.Duration     `env:"PSL_LOCK_DURATION, default=10s"` // Default lock duration
@@ -34,10 +34,10 @@ type Config struct {
 
 type HealthCheckConfig struct {
 	Enabled      bool          `env:"ENABLED, default=false"`
-	Endpoints    []string      `env:"ENDPOINTS"`                // Health check tcp endpoint, host:port
-	PeriodOnFail time.Duration `env:"PERIOD_FAIL, default=10s"` // Pause between endpoint health checks if previous failed
-	PeriodOnPass time.Duration `env:"PERIOD_PASS, default=60s"` // Pause between endpoint health checks if previous succeeded
-	Timeout      time.Duration `env:"TIMEOUT, default=10s"`     // Timeout of health checks
+	Endpoints    []string      `env:"ENDPOINTS"`                // List of endpoints to check before allow locking
+	PeriodOnFail time.Duration `env:"PERIOD_FAIL, default=10s"` // Period of health checks if previous failed
+	PeriodOnPass time.Duration `env:"PERIOD_PASS, default=60s"` // Period of health checks if previous succeeded
+	Timeout      time.Duration `env:"TIMEOUT, default=5s"`      // Timeout of health check requests
 }
 
 func NewConfig(ctx context.Context) (Config, error) {

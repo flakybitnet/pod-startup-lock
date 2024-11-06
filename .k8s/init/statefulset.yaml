@@ -21,14 +21,14 @@ spec:
         - name: psl
           # image: <registry>/psl/lock:<version>
           # image: <registry>/flakybitnet/psl-lock:<version>
-          image: harbor.flakybit.net/psl/init:1.1.0
-          args:
-            - --host
-            - lock.psl.svc.cluster.local
-            - --pause
-            - "5"
-            - --duration
-            - "20"
+          image: harbor.flakybit.net/psl/init:2.0.0
+          env:
+            - name: PSL_LOCK_HOST
+              value: lock.psl.svc.cluster.local
+            - name: PSL_LOCK_CHECK_PERIOD
+              value: 5s
+            - name: PSL_LOCK_DURATION
+              value: 20s
           resources:
             requests:
               cpu: 20m
