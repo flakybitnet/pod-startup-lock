@@ -16,14 +16,9 @@ matrix:
     - lock
 
 when:
-  - branch: main
-    event:
+  - event:
       - manual
-    evaluate: 'RUN_COMPONENTS == "" || APP_COMPONENT in split(RUN_COMPONENTS, ",")'
-  - branch:
-      exclude: main
-    event:
-      - manual
+      - push
       - tag
     evaluate: 'RUN_COMPONENTS == "" || APP_COMPONENT in split(RUN_COMPONENTS, ",")'
 
