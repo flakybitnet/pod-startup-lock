@@ -18,9 +18,7 @@ spec:
       serviceAccountName: k8s-health
       containers:
         - name: k8s-health
-          # image: <registry>/psl/k8s-health:<version>
-          # image: <registry>/flakybitnet/psl-k8s-health:<version>
-          image: harbor.flakybit.net/psl/k8s-health:2.0.0
+          image: registry.gitlab.com/flakybitnet/pod-startup-lock/k8s-health:2.0.1
           envFrom:
             - configMapRef:
                 name: k8s-health

@@ -54,7 +54,10 @@ The OCI images are available at
   * [K8s health](https://gallery.ecr.aws/flakybitnet/psl/k8s-health)
   * [Lock](https://gallery.ecr.aws/flakybitnet/psl/lock)
   * [Init](https://gallery.ecr.aws/flakybitnet/psl/init)
-* **FlakyBit's Harbor**
+* **GitLab**
+  * [K8s health](https://gitlab.com/flakybitnet/pod-startup-lock/container_registry/12036959)
+  * [Lock](https://gitlab.com/flakybitnet/pod-startup-lock/container_registry/12036960)
+  * [Init](https://gitlab.com/flakybitnet/pod-startup-lock/container_registry/12036961)
 
 ## How to build locally
 
@@ -96,6 +99,11 @@ The OCI images are available at
 
 ## Release Notes
 
+* `2.1.0`
+  - Multiplatform images
+  - Major dependencies bump
+* `2.0.1`
+  - Bug fixes and deps bump
 * `2.0.0`
   - Added node load health check
   - Reworked configuration
@@ -122,7 +130,7 @@ Please feel free to submit issues, fork the repository and send pull requests!
 
 ## Source
 
-Source code is available at [Gitea](https://gitea.flakybit.net/flakybit/pod-startup-lock)
+Source code is available on [GitLab](https://gitlab.com/flakybitnet/pod-startup-lock)
 and mirrored to [GitHub](https://github.com/flakybitnet/pod-startup-lock).
 
 ## Links

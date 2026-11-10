@@ -19,9 +19,7 @@ spec:
     spec:
       initContainers:
         - name: psl
-          # image: <registry>/psl/lock:<version>
-          # image: <registry>/flakybitnet/psl-lock:<version>
-          image: harbor.flakybit.net/psl/init:2.0.0
+          image: registry.gitlab.com/flakybitnet/pod-startup-lock/init:2.0.1
           env:
             - name: PSL_LOCK_HOST
               value: lock.psl.svc.cluster.local
