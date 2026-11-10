@@ -1,0 +1,442 @@
+stages:
+  - test
+  - build
+  - package
+  - manifest
+  - mirror
+
+variables:
+  CGO_ENABLED: 0
+  GOOS: linux
+  IMG_GOLANG: public.ecr.aws/docker/library/golang:1.27.3-trixie
+  IMG_BUILDAH: quay.io/buildah/stable:v1.43.5
+  IMG_GIT: docker.io/alpine/git:v2.54.0
+  IMG_SKOPEO: public.ecr.aws/flakybitnet/skopeo:1.22.3-fb1
+
+# Test
+
+all-test:
+  stage: test
+  image: $IMG_GOLANG
+  parallel:
+    matrix:
+      - APP_COMPONENT:
+        - init
+        - k8s-health
+        - lock
+  script:
+    - cd "$APP_COMPONENT"
+    - go test -cover -v ./...
+
+# Compile binaries
+
+init-bin:
+  stage: build
+  image: $IMG_GOLANG
+  variables:
+    APP_COMPONENT: init
+  parallel:
+    matrix:
+      - GOARCH:
+        - amd64
+        - arm
+        - arm64
+  script:
+    - mkdir dist/
+    - cd "$APP_COMPONENT"
+    - go build -v -a -o "../dist/$APP_COMPONENT-$GOARCH"
+  artifacts:
+    paths:
+      - dist
+
+k8s-health-bin:
+  stage: build
+  image: $IMG_GOLANG
+  variables:
+    APP_COMPONENT: k8s-health
+  parallel:
+    matrix:
+      - GOARCH:
+        - amd64
+        - arm
+        - arm64
+  script:
+    - mkdir dist/
+    - cd "$APP_COMPONENT"
+    - go build -v -a -o "../dist/$APP_COMPONENT-$GOARCH"
+  artifacts:
+    paths:
+      - dist
+
+lock-bin:
+  stage: build
+  image: $IMG_GOLANG
+  variables:
+    APP_COMPONENT: lock
+  parallel:
+    matrix:
+      - GOARCH:
+        - amd64
+        - arm
+        - arm64
+  script:
+    - mkdir dist/
+    - cd "$APP_COMPONENT"
+    - go build -v -a -o "../dist/$APP_COMPONENT-$GOARCH"
+  artifacts:
+    paths:
+      - dist
+
+# Package images
+
+init-img:
+  stage: package
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies:
+    - init-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: init
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+      --file .oci/Containerfile
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+
+k8s-health-img:
+  stage: package
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies:
+    - k8s-health-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: k8s-health
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+      --file .oci/Containerfile
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+
+lock-img:
+  stage: package
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies:
+    - lock-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: lock
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+      --file .oci/Containerfile
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH"
+
+init-img-dbg:
+  stage: package
+  dependencies:
+    - init-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: init
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+      --file .oci/Containerfile-debug
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+
+k8s-health-img-dbg:
+  stage: package
+  dependencies:
+    - k8s-health-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: k8s-health
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+      --file .oci/Containerfile-debug
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+
+lock-img-dbg:
+  stage: package
+  dependencies:
+    - lock-bin
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: lock
+  parallel:
+    matrix:
+      - ARCH:
+          - amd64
+          - arm
+          - arm64
+  script:
+    - mkdir bin
+    - mv "dist/$APP_COMPONENT-$ARCH" bin/app
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah build
+      --platform=linux/$ARCH
+      --tag "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+      --file .oci/Containerfile-debug
+    - buildah push "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-$ARCH-debug"
+
+# Generate manifests
+
+init-man:
+  stage: manifest
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: init
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$OCI_NAME"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64"
+    - buildah manifest push --all "$OCI_NAME"
+
+k8s-health-man:
+  stage: manifest
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: k8s-health
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$OCI_NAME"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64"
+    - buildah manifest push --all "$OCI_NAME"
+
+lock-man:
+  stage: manifest
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: lock
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$OCI_NAME"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64"
+    - buildah manifest push --all "$OCI_NAME"
+
+init-man-dbg:
+  stage: manifest
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: init
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$OCI_NAME"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64-debug"
+    - buildah manifest push --all "$OCI_NAME"
+
+k8s-health-man-dbg:
+  stage: manifest
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: k8s-health
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64-debug"
+    - buildah manifest push --all "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug"
+
+lock-man-dbg:
+  stage: manifest
+  dependencies: []
+  image: $IMG_BUILDAH
+  variables:
+    STORAGE_DRIVER: vfs
+    APP_COMPONENT: lock
+    OCI_NAME: $CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah manifest create "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-amd64-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm-debug"
+    - buildah manifest add "$OCI_NAME" "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-arm64-debug"
+    - buildah manifest push --all "$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug"
+
+# Mirror Git
+
+github-git-mrrr:
+  stage: mirror
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'push'
+  dependencies: []
+  image:
+    name: $IMG_GIT
+    entrypoint: [ "" ]
+  variables:
+    GIT_STRATEGY: clone
+  script:
+    - git remote add github "https://$GITHUB_USER:$GITHUB_PASSWORD@github.com/flakybitnet/pod-startup-lock.git"
+    - if [ -n "${CI_COMMIT_BRANCH-}" ]; then
+        git checkout -b "$CI_COMMIT_BRANCH";
+        git fetch github;
+        git push --force-with-lease github "$CI_COMMIT_BRANCH";
+        fi
+    - if [ -n "${CI_COMMIT_TAG-}" ]; then
+        git push github tag $CI_COMMIT_TAG;
+        fi
+
+# Mirror images
+
+github-img-mrrr:
+  stage: mirror
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image:
+    name: $IMG_SKOPEO
+    entrypoint: [ "" ]
+  variables:
+    REGISTRY: ghcr.io
+    IMAGE: flakybitnet/psl-$APP_COMPONENT
+    GIT_STRATEGY: none
+  parallel:
+    matrix:
+      - APP_COMPONENT:
+        - init
+        - k8s-health
+        - lock
+  script:
+    - echo "$GITHUB_PASSWORD" | skopeo login -u "$GITHUB_USER" --password-stdin "$REGISTRY"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME-debug"
+
+quay-img-mrrr:
+  stage: mirror
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image:
+    name: $IMG_SKOPEO
+    entrypoint: [ "" ]
+  variables:
+    REGISTRY: quay.io
+    IMAGE: flakybitnet/psl-$APP_COMPONENT
+    GIT_STRATEGY: none
+  parallel:
+    matrix:
+      - APP_COMPONENT:
+        - init
+        - k8s-health
+        - lock
+  script:
+    - echo "$QUAY_PASSWORD" | skopeo login -u "$QUAY_USER" --password-stdin "$REGISTRY"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME-debug"
+
+amazon-img-mrrr:
+  stage: mirror
+  rules:
+    - if: $CI_COMMIT_TAG
+  dependencies: []
+  image:
+    name: $IMG_SKOPEO
+    entrypoint: [ "" ]
+  variables:
+    REGISTRY: public.ecr.aws
+    IMAGE: flakybitnet/psl/$APP_COMPONENT
+    GIT_STRATEGY: none
+    AWS_ACCESS_KEY_ID: $ECR_USER
+    AWS_SECRET_ACCESS_KEY: $ECR_PASSWORD
+  parallel:
+    matrix:
+      - APP_COMPONENT:
+        - init
+        - k8s-health
+        - lock
+  script:
+    - printf '{"credHelpers":{"%s":"%s"}}' "$REGISTRY" 'ecr-login' > "$HOME/auth.json"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME"
+      --dest-authfile="$HOME/auth.json"
+    - skopeo copy --all "docker://$CI_REGISTRY_IMAGE/$APP_COMPONENT:$CI_COMMIT_REF_NAME-debug" "docker://$REGISTRY/$IMAGE:$CI_COMMIT_REF_NAME-debug"
+      --dest-authfile="$HOME/auth.json"
